@@ -17,6 +17,7 @@
 
 body {
   margin: 0;
+  min-height: 100vh;
   background: var(--bg);
   color: var(--ink);
 }
@@ -37,6 +38,12 @@ h3 { font-size: 16px; margin-bottom: 8px; }
 .top p, .hint, .empty { color: var(--muted); }
 .hint { font-size: 13px; line-height: 1.4; margin: 8px 0 0; }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .status {
   padding: 8px 12px;
   border-radius: 999px;
@@ -49,12 +56,55 @@ h3 { font-size: 16px; margin-bottom: 8px; }
 .status[data-state="bad"] { color: var(--bad); }
 .status[data-state="idle"] { color: var(--idle); }
 
-.layout {
-  display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 16px;
+.workspace {
   padding: 16px 24px 32px;
-  align-items: start;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: -1px;
+  padding-left: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.tabs button {
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 18px;
+}
+
+.tabs button.active {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow: auto;
+  background: rgb(28 25 21 / 55%);
+}
+
+.connection-dialog {
+  width: min(100%, 460px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgb(28 25 21 / 25%);
+}
+
+.dialog-description {
+  margin: 6px 0 18px;
+  color: var(--muted);
 }
 
 .panel {
@@ -153,8 +203,31 @@ table { width: max-content; min-width: 100%; }
 .log li { display: grid; grid-template-columns: 72px minmax(180px, 1.4fr) 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
 .log { margin-top: 16px; }
 
+.three-view {
+  min-height: calc(100vh - 170px);
+}
+
+.three-view-placeholder {
+  min-height: calc(100vh - 204px);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  border: 2px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.three-view-placeholder h2 {
+  color: var(--ink);
+}
+
+#three-view-container {
+  width: 100%;
+  min-height: 1px;
+}
+
 @media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; }
   .top { flex-direction: column; align-items: flex-start; }
   .log li { grid-template-columns: 1fr; }
 }

@@ -9,6 +9,8 @@
         error: "",
         busy: false,
         connected: false,
+        connectionDialogOpen: true,
+        activeTab: "topics",
         project: null,
         unpacked: [],
         topics: [],
@@ -226,6 +228,8 @@
           if (this.form.host.trim())
             this.startPoll();
           this.setStatus("Подключено");
+          this.activeTab = "topics";
+          this.connectionDialogOpen = false;
           this.busy = false;
         } catch (e) {
           this.fail(e && e.message ? e.message : e);
@@ -241,6 +245,8 @@
         this.topicIndex = new Map();
         this.brokerUrl = "";
         this.log = [];
+        this.activeTab = "topics";
+        this.connectionDialogOpen = true;
         this.setStatus("Отключено");
         this.busy = false;
       }

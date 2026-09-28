@@ -13,60 +13,31 @@
         <h1>Jocket</h1>
         <p>Загрузка проекта из файла, Т-Облака или с сервера и топики протокола Jocket.</p>
       </div>
-      <div class="status" :data-state="error ? 'bad' : (connected ? 'ok' : 'idle')">{{ status }}</div>
+      <div class="header-actions">
+        <div class="status" :data-state="error ? 'bad' : (connected ? 'ok' : 'idle')">{{ status }}</div>
+        <button v-if="connected" type="button" class="ghost" :disabled="busy" @click="disconnect">Отключить</button>
+      </div>
     </header>
 
-    <div class="layout">
-      <form class="panel" @submit.prevent="connect">
-        <fieldset>
-          <legend>Источник проекта</legend>
-          <label class="choice"><input type="radio" value="file" v-model="form.source"> Файл .ctp</label>
-          <label class="choice"><input type="radio" value="cloud" v-model="form.source"> Т-Облако</label>
-          <label class="choice"><input type="radio" value="server" v-model="form.source"> Сервер</label>
-        </fieldset>
+    <main v-if="connected" class="workspace">
+      <nav class="tabs" role="tablist" aria-label="Разделы проекта">
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'topics'"
+          :class="{ active: activeTab === 'topics' }"
+          @click="activeTab = 'topics'"
+        >Топики</button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'view3d'"
+          :class="{ active: activeTab === 'view3d' }"
+          @click="activeTab = 'view3d'"
+        >3D-view</button>
+      </nav>
 
-        <label v-if="form.source === 'file'">Файл проекта
-          <input type="file" accept=".ctp,application/zip,application/octet-stream" @change="onFile">
-          <span class="hint" v-if="form.fileName">{{ form.fileName }}</span>
-        </label>
-
-        <label v-if="form.source === 'cloud'">Код Т-Облака
-          <input v-model="form.cloudCode" inputmode="numeric" maxlength="12" placeholder="12 цифр" autocomplete="off">
-        </label>
-
-        <fieldset>
-          <legend>Сервер</legend>
-          <label>IP
-            <input v-model="form.host" placeholder="192.168.1.10" autocomplete="off" required>
-          </label>
-          <div class="split">
-            <label>Порт MQTT
-              <input v-model.number="form.port" type="number" min="1" max="65535" required>
-            </label>
-            <label>Web port
-              <input v-model.number="form.webPort" type="number" min="1" max="65535" required>
-            </label>
-          </div>
-          <label>Пользователь
-            <input v-model="form.user" autocomplete="username">
-          </label>
-          <label>Пароль
-            <input v-model="form.password" type="password" autocomplete="current-password">
-          </label>
-          <label class="choice"><input type="checkbox" v-model="form.ssl"> SSL</label>
-          <p class="hint">Web port — это HTTP. Проект скачивается запросом POST /projector/api/v1/project/download_ctp/. Значения топиков читаются запросом GET /proxy/v1/state.</p>
-        </fieldset>
-
-        <div class="actions">
-          <button type="submit" :disabled="busy">Подключить</button>
-          <button type="button" class="ghost" :disabled="busy || !connected" @click="disconnect">Отключить</button>
-        </div>
-        <p class="error" v-if="error">{{ error }}</p>
-        <p class="hint" v-if="brokerUrl">{{ brokerUrl }}</p>
-        <p class="hint" v-if="clientId">Клиент {{ clientId }}<span v-if="sessionId"> · сессия {{ sessionId }}</span></p>
-      </form>
-
-      <section class="panel work">
+      <section v-show="activeTab === 'topics'" class="panel work" role="tabpanel">
         <div v-if="project" class="summary">
           <h2>{{ project.name }}</h2>
           <dl>
@@ -79,7 +50,6 @@
           <p class="hint" v-if="commandPrefix">Команды публикуются в {{ commandPrefix }} с тем же хвостом, что у State.</p>
           <p class="hint">В архиве: {{ unpacked.join(", ") }}</p>
         </div>
-        <p class="empty" v-else>Проект ещё не загружен.</p>
 
         <div class="toolbar" v-if="topics.length">
           <input v-model="filter" placeholder="Фильтр по топику, имени или типу">
@@ -125,6 +95,67 @@
           </ul>
         </div>
       </section>
+
+      <section v-show="activeTab === 'view3d'" class="panel three-view" role="tabpanel">
+        <div class="three-view-placeholder">
+          <h2>3D-view проекта</h2>
+          <p>Здесь будет размещена сцена Three.js.</p>
+          <div id="three-view-container"></div>
+        </div>
+      </section>
+    </main>
+
+    <div v-if="connectionDialogOpen" class="dialog-backdrop">
+      <form class="panel connection-dialog" role="dialog" aria-modal="true" aria-labelledby="connection-title" @submit.prevent="connect">
+        <h2 id="connection-title">Подключение к серверу</h2>
+        <p class="dialog-description">Укажите источник проекта и параметры сервера.</p>
+
+        <fieldset>
+          <legend>Источник проекта</legend>
+          <label class="choice"><input type="radio" value="file" v-model="form.source"> Файл .ctp</label>
+          <label class="choice"><input type="radio" value="cloud" v-model="form.source"> Т-Облако</label>
+          <label class="choice"><input type="radio" value="server" v-model="form.source"> Сервер</label>
+        </fieldset>
+
+        <label v-if="form.source === 'file'">Файл проекта
+          <input type="file" accept=".ctp,application/zip,application/octet-stream" @change="onFile">
+          <span class="hint" v-if="form.fileName">{{ form.fileName }}</span>
+        </label>
+
+        <label v-if="form.source === 'cloud'">Код Т-Облака
+          <input v-model="form.cloudCode" inputmode="numeric" maxlength="12" placeholder="12 цифр" autocomplete="off">
+        </label>
+
+        <fieldset>
+          <legend>Сервер</legend>
+          <label>IP
+            <input v-model="form.host" placeholder="192.168.1.10" autocomplete="off" required>
+          </label>
+          <div class="split">
+            <label>Порт MQTT
+              <input v-model.number="form.port" type="number" min="1" max="65535" required>
+            </label>
+            <label>Web port
+              <input v-model.number="form.webPort" type="number" min="1" max="65535" required>
+            </label>
+          </div>
+          <label>Пользователь
+            <input v-model="form.user" autocomplete="username">
+          </label>
+          <label>Пароль
+            <input v-model="form.password" type="password" autocomplete="current-password">
+          </label>
+          <label class="choice"><input type="checkbox" v-model="form.ssl"> SSL</label>
+          <p class="hint">Web port — это HTTP. Проект скачивается запросом POST /projector/api/v1/project/download_ctp/. Значения топиков читаются запросом GET /proxy/v1/state.</p>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit" :disabled="busy">Подключить</button>
+        </div>
+        <p class="error" v-if="error">{{ error }}</p>
+        <p class="hint" v-if="brokerUrl">{{ brokerUrl }}</p>
+        <p class="hint" v-if="clientId">Клиент {{ clientId }}<span v-if="sessionId"> · сессия {{ sessionId }}</span></p>
+      </form>
     </div>
   </div>
 
