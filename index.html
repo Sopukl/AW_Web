@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jocket</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <div>
+        <h1>Jocket</h1>
+        <p>Загрузка проекта из файла, Т-Облака или с сервера и топики протокола Jocket.</p>
+      </div>
+      <div class="status" :data-state="error ? 'bad' : (connected ? 'ok' : 'idle')">{{ status }}</div>
+    </header>
+
+    <div class="layout">
+      <form class="panel" @submit.prevent="connect">
+        <fieldset>
+          <legend>Источник проекта</legend>
+          <label class="choice"><input type="radio" value="file" v-model="form.source"> Файл .ctp</label>
+          <label class="choice"><input type="radio" value="cloud" v-model="form.source"> Т-Облако</label>
+          <label class="choice"><input type="radio" value="server" v-model="form.source"> Сервер</label>
+        </fieldset>
+
+        <label v-if="form.source === 'file'">Файл проекта
+          <input type="file" accept=".ctp,application/zip,application/octet-stream" @change="onFile">
+          <span class="hint" v-if="form.fileName">{{ form.fileName }}</span>
+        </label>
+
+        <label v-if="form.source === 'cloud'">Код Т-Облака
+          <input v-model="form.cloudCode" inputmode="numeric" maxlength="12" placeholder="12 цифр" autocomplete="off">
+        </label>
+
+        <fieldset>
+          <legend>Сервер</legend>
+          <label>IP
+            <input v-model="form.host" placeholder="192.168.1.10" autocomplete="off" required>
+          </label>
+          <div class="split">
+            <label>Порт MQTT
+              <input v-model.number="form.port" type="number" min="1" max="65535" required>
+            </label>
+            <label>Web port
+              <input v-model.number="form.webPort" type="number" min="1" max="65535" required>
+            </label>
+          </div>
+          <label>Пользователь
+            <input v-model="form.user" autocomplete="username">
+          </label>
+          <label>Пароль
+            <input v-model="form.password" type="password" autocomplete="current-password">
+          </label>
+          <label class="choice"><input type="checkbox" v-model="form.ssl"> SSL</label>
+          <p class="hint">Web port — это HTTP. Проект скачивается запросом POST /projector/api/v1/project/download_ctp/. Значения топиков читаются запросом GET /proxy/v1/state.</p>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit" :disabled="busy">Подключить</button>
+          <button type="button" class="ghost" :disabled="busy || !connected" @click="disconnect">Отключить</button>
+        </div>
+        <p class="error" v-if="error">{{ error }}</p>
+        <p class="hint" v-if="brokerUrl">{{ brokerUrl }}</p>
+        <p class="hint" v-if="clientId">Клиент {{ clientId }}<span v-if="sessionId"> · сессия {{ sessionId }}</span></p>
+      </form>
+
+      <section class="panel work">
+        <div v-if="project" class="summary">
+          <h2>{{ project.name }}</h2>
+          <dl>
+            <div><dt>ID</dt><dd>{{ project.id }}</dd></div>
+            <div><dt>Инженерия</dt><dd>{{ project.engineries }}</dd></div>
+            <div><dt>Сабджинерия</dt><dd>{{ project.subgineries }}</dd></div>
+            <div><dt>Менеджеры</dt><dd>{{ project.managers }}</dd></div>
+            <div><dt>Провайдеры</dt><dd>{{ project.providers }}</dd></div>
+          </dl>
+          <p class="hint" v-if="commandPrefix">Команды публикуются в {{ commandPrefix }} с тем же хвостом, что у State.</p>
+          <p class="hint">В архиве: {{ unpacked.join(", ") }}</p>
+        </div>
+        <p class="empty" v-else>Проект ещё не загружен.</p>
+
+        <div class="toolbar" v-if="topics.length">
+          <input v-model="filter" placeholder="Фильтр по топику, имени или типу">
+          <select v-model="kind">
+            <option value="all">Все ({{ topics.length }})</option>
+            <option v-for="name in kinds" :key="name" :value="name">{{ name }}</option>
+          </select>
+        </div>
+
+        <div class="table-wrap" v-if="visibleTopics.length">
+          <table>
+            <thead>
+              <tr>
+                <th>Топик</th>
+                <th>Группа</th>
+                <th>Объект</th>
+                <th>Поле</th>
+                <th>Значение</th>
+                <th>Время</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in visibleTopics" :key="row.topic">
+                <td class="topic">{{ row.topic }}</td>
+                <td>{{ row.kind }}</td>
+                <td>{{ row.entity }}<span class="muted" v-if="row.type"> · {{ row.type }}</span></td>
+                <td>{{ row.field }}</td>
+                <td class="value" :title="row.value">{{ row.value }}</td>
+                <td>{{ row.at }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="log" v-if="log.length">
+          <h3>Состояния</h3>
+          <ul>
+            <li v-for="(item, idx) in log" :key="idx">
+              <time>{{ item.at }}</time>
+              <code>{{ item.topic }}</code>
+              <span>{{ item.value }}</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+  <script src="jocket.js"></script>
+  <script src="project.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>
