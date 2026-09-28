@@ -96,6 +96,8 @@
       id: project.id,
       name: project.title || project.name || ("Проект " + project.id),
       cloudCode: project.cloudCode || "",
+      rootLocationID: project.rootLocationID,
+      models: readList(files, "models.json", "models"),
       engineries: readList(files, "engineries.json", "engineries"),
       subgineries: readList(files, "subgineries.json", "subgineries"),
       servers: readList(files, "servers.json", "servers"),

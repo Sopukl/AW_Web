@@ -97,10 +97,27 @@
       </section>
 
       <section v-show="activeTab === 'view3d'" class="panel three-view" role="tabpanel">
-        <div class="three-view-placeholder">
-          <h2>3D-view проекта</h2>
-          <p>Здесь будет размещена сцена Three.js.</p>
+        <aside class="location-panel">
+          <h2>Локации</h2>
+          <p class="hint">Выберите локацию для перехода.</p>
+          <div class="location-list">
+            <button
+              v-for="location in locations"
+              :key="location.id"
+              type="button"
+              :class="{ active: currentLocationId === location.id }"
+              :disabled="!location.arrangements || !location.arrangements.length"
+              @click="selectLocation(location.id)"
+            >
+              <span>{{ location.title || location.label || location.name || ('Локация ' + location.id) }}</span>
+              <small>ID {{ location.id }}</small>
+            </button>
+          </div>
+        </aside>
+        <div class="three-stage">
           <div id="three-view-container"></div>
+          <div v-if="view3dError" class="three-message error">{{ view3dError }}</div>
+          <div v-else-if="!locations.length" class="three-message">В проекте нет локаций.</div>
         </div>
       </section>
     </main>
@@ -161,8 +178,10 @@
 
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
   <script src="jocket.js"></script>
   <script src="project.js"></script>
+  <script src="three-view.js"></script>
   <script src="ui.js"></script>
 </body>
 </html>

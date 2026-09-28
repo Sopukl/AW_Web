@@ -11,6 +11,9 @@
         connected: false,
         connectionDialogOpen: true,
         activeTab: "topics",
+        locations: [],
+        currentLocationId: null,
+        view3dError: "",
         project: null,
         unpacked: [],
         topics: [],
@@ -42,6 +45,12 @@
         if (!this.project || !this.sessionId)
           return "";
         return "Jocket/Command/" + this.project.id + "/" + this.sessionId + "/";
+      }
+    },
+    watch: {
+      activeTab(value) {
+        if (value === "view3d")
+          this.$nextTick(() => this.initThreeView());
       }
     },
     methods: {
@@ -86,8 +95,36 @@
         };
         this.unpacked = project.files;
         this._model = project;
+        this.locations = project.locations.slice();
+        this.currentLocationId = null;
+        this.view3dError = "";
         this.topics = buildEntityTopics(project);
         this.indexTopics();
+      },
+      initThreeView() {
+        if (this._threeView || !this._model)
+          return;
+        try {
+          const container = document.getElementById("three-view-container");
+          this._threeView = new ProjectThreeView(container, this._model);
+          const rootId = this._model.rootLocationID;
+          const first = this.locations.find((location) =>
+            location.id === rootId && location.arrangements && location.arrangements.length
+          ) || this.locations.find((location) =>
+            location.arrangements && location.arrangements.length
+          );
+          if (first) {
+            this.currentLocationId = first.id;
+            this._threeView.goToLocation(first.id, false);
+          }
+        } catch (e) {
+          this.view3dError = e && e.message ? e.message : String(e);
+          console.error(e);
+        }
+      },
+      selectLocation(locationId) {
+        if (this._threeView && this._threeView.goToLocation(locationId, true))
+          this.currentLocationId = locationId;
       },
       async readSource() {
         if (this.form.source === "file") {
@@ -239,8 +276,15 @@
       async disconnect() {
         this.busy = true;
         this.stopPoll();
+        if (this._threeView) {
+          this._threeView.dispose();
+          this._threeView = null;
+        }
         this.project = null;
         this.topics = [];
+        this.locations = [];
+        this.currentLocationId = null;
+        this.view3dError = "";
         this.unpacked = [];
         this.topicIndex = new Map();
         this.brokerUrl = "";
