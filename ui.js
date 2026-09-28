@@ -12,6 +12,7 @@
         connectionDialogOpen: true,
         activeTab: "topics",
         locations: [],
+        expandedLocations: {},
         currentLocationId: null,
         view3dError: "",
         project: null,
@@ -45,6 +46,53 @@
         if (!this.project || !this.sessionId)
           return "";
         return "Jocket/Command/" + this.project.id + "/" + this.sessionId + "/";
+      },
+      locationTree() {
+        const nodes = new Map(this.locations.map((location) => [
+          String(location.id),
+          { location: location, children: [], parent: null }
+        ]));
+
+        for (const location of this.locations) {
+          const parent = nodes.get(String(location.id));
+          for (const model of location.models || []) {
+            for (const transition of model.transitions || []) {
+              if (transition.sameLevel)
+                continue;
+              const child = nodes.get(String(transition.locationID));
+              if (!child || child === parent || child.parent)
+                continue;
+              child.parent = parent;
+              parent.children.push(child);
+            }
+          }
+        }
+
+        const byTitle = (a, b) => this.locationTitle(a.location)
+          .localeCompare(this.locationTitle(b.location), "ru");
+        nodes.forEach((node) => node.children.sort(byTitle));
+
+        const roots = Array.from(nodes.values()).filter((node) => !node.parent).sort(byTitle);
+        const rootId = this.project && this.project.rootLocationID;
+        const rootIndex = roots.findIndex((node) => node.location.id === rootId);
+        if (rootIndex > 0)
+          roots.unshift(roots.splice(rootIndex, 1)[0]);
+        return roots;
+      },
+      visibleLocationNodes() {
+        const result = [];
+        const visited = new Set();
+        const append = (node, depth) => {
+          const key = String(node.location.id);
+          if (visited.has(key))
+            return;
+          visited.add(key);
+          result.push({ location: node.location, children: node.children, depth: depth });
+          if (this.isLocationExpanded(node.location.id))
+            node.children.forEach((child) => append(child, depth + 1));
+        };
+        this.locationTree.forEach((root) => append(root, 0));
+        return result;
       }
     },
     watch: {
@@ -88,6 +136,7 @@
           id: project.id,
           name: project.name,
           cloudCode: project.cloudCode,
+          rootLocationID: project.rootLocationID,
           engineries: project.engineries.length,
           subgineries: project.subgineries.length,
           managers: project.managers.length,
@@ -96,6 +145,9 @@
         this.unpacked = project.files;
         this._model = project;
         this.locations = project.locations.slice();
+        this.expandedLocations = Object.fromEntries(
+          this.locations.map((location) => [String(location.id), true])
+        );
         this.currentLocationId = null;
         this.view3dError = "";
         this.topics = buildEntityTopics(project);
@@ -125,6 +177,18 @@
       selectLocation(locationId) {
         if (this._threeView && this._threeView.goToLocation(locationId, true))
           this.currentLocationId = locationId;
+      },
+      locationTitle(location) {
+        return location.title || location.label ||
+          String(location.name || "").replace(/\*$/, "") ||
+          ("Локация " + location.id);
+      },
+      isLocationExpanded(locationId) {
+        return this.expandedLocations[String(locationId)] !== false;
+      },
+      toggleLocation(locationId) {
+        const key = String(locationId);
+        this.expandedLocations[key] = !this.isLocationExpanded(locationId);
       },
       async readSource() {
         if (this.form.source === "file") {
@@ -283,6 +347,7 @@
         this.project = null;
         this.topics = [];
         this.locations = [];
+        this.expandedLocations = {};
         this.currentLocationId = null;
         this.view3dError = "";
         this.unpacked = [];

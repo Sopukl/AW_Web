@@ -100,18 +100,35 @@
         <aside class="location-panel">
           <h2>Локации</h2>
           <p class="hint">Выберите локацию для перехода.</p>
-          <div class="location-list">
-            <button
-              v-for="location in locations"
-              :key="location.id"
-              type="button"
-              :class="{ active: currentLocationId === location.id }"
-              :disabled="!location.arrangements || !location.arrangements.length"
-              @click="selectLocation(location.id)"
+          <div class="location-tree" role="tree">
+            <div
+              v-for="node in visibleLocationNodes"
+              :key="node.location.id"
+              class="location-tree-row"
+              :style="{ '--tree-depth': node.depth }"
+              role="treeitem"
+              :aria-level="node.depth + 1"
+              :aria-expanded="node.children.length ? isLocationExpanded(node.location.id) : undefined"
             >
-              <span>{{ location.title || location.label || location.name || ('Локация ' + location.id) }}</span>
-              <small>ID {{ location.id }}</small>
-            </button>
+              <button
+                v-if="node.children.length"
+                type="button"
+                class="tree-toggle"
+                :aria-label="isLocationExpanded(node.location.id) ? 'Свернуть' : 'Развернуть'"
+                @click="toggleLocation(node.location.id)"
+              >{{ isLocationExpanded(node.location.id) ? '▾' : '▸' }}</button>
+              <span v-else class="tree-spacer"></span>
+              <button
+                type="button"
+                class="location-button"
+                :class="{ active: currentLocationId === node.location.id }"
+                :disabled="!node.location.arrangements || !node.location.arrangements.length"
+                @click="selectLocation(node.location.id)"
+              >
+                <span>{{ locationTitle(node.location) }}</span>
+                <small>ID {{ node.location.id }}</small>
+              </button>
+            </div>
           </div>
         </aside>
         <div class="three-stage">
