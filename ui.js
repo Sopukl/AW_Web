@@ -150,6 +150,7 @@
         );
         this.currentLocationId = null;
         this.view3dError = "";
+        this._engineryStates = new Map();
         this.topics = buildEntityTopics(project);
         this.indexTopics();
       },
@@ -168,6 +169,10 @@
           if (first) {
             this.currentLocationId = first.id;
             this._threeView.goToLocation(first.id, false);
+          }
+          for (const [engineryId, fields] of this._engineryStates || []) {
+            for (const [field, value] of Object.entries(fields))
+              this._threeView.updateEngineryState(engineryId, field, value);
           }
         } catch (e) {
           this.view3dError = e && e.message ? e.message : String(e);
@@ -250,6 +255,14 @@
         rows.forEach((row) => {
           if (!Object.prototype.hasOwnProperty.call(data, row.field))
             return;
+          if (row.entityId !== null && row.entityId !== undefined) {
+            const key = String(row.entityId);
+            const fields = this._engineryStates.get(key) || {};
+            fields[row.field] = data[row.field];
+            this._engineryStates.set(key, fields);
+            if (this._threeView)
+              this._threeView.updateEngineryState(row.entityId, row.field, data[row.field]);
+          }
           const text = this.stateText(data[row.field]);
           if (row.value !== text) {
             row.value = text;
@@ -348,6 +361,7 @@
         this.topics = [];
         this.locations = [];
         this.expandedLocations = {};
+        this._engineryStates = new Map();
         this.currentLocationId = null;
         this.view3dError = "";
         this.unpacked = [];

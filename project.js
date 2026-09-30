@@ -122,6 +122,7 @@
       topic: topic,
       kind: "",
       entity: "",
+      entityId: null,
       type: "",
       field: "",
       value: "",
@@ -153,6 +154,7 @@
         pushTopics(list, seen, topic, {
           kind: "Инженерия",
           entity: entityLabel(item),
+          entityId: item.id,
           type: item.type,
           field: field
         });

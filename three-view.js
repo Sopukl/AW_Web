@@ -80,7 +80,24 @@
     );
   }
 
-  function buildConstructionSurface(surface) {
+  const LIGHT_COLORS = {
+    DimmingLight: "#e42583",
+    DynamicLight: "#ffff33",
+    EmergencyUnit: "#04ff1c",
+    RGBLight: "#e42583",
+    RGBWLight: "#e42583",
+    RgbLight: "#e42583",
+    RgbwLight: "#e42583",
+    SwitchingLight: "#a821b6",
+    TunableWhiteLight: "#f9deb9"
+  };
+
+  function isRenderSurface(surface) {
+    return surface.Signature === "S" || surface.Signature === 83;
+  }
+
+  function buildSurface(surface, options) {
+    options = options || {};
     const positions = [];
     const normals = [];
     const fillIndices = [];
@@ -110,48 +127,91 @@
       position: new THREE.Float32BufferAttribute(positions, 3),
       normal: new THREE.Float32BufferAttribute(normals, 3)
     };
-    const parsedColor = parseColor(surface.color);
+    const parsedColor = options.color
+      ? { color: new THREE.Color(options.color), opacity: 1 }
+      : parseColor(surface.color);
 
+    let fillGeometry = null;
     if (fillIndices.length) {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", attributes.position);
-      geometry.setAttribute("normal", attributes.normal);
-      geometry.setIndex(fillIndices);
-      geometry.computeBoundingSphere();
+      fillGeometry = new THREE.BufferGeometry();
+      fillGeometry.setAttribute("position", attributes.position);
+      fillGeometry.setAttribute("normal", attributes.normal);
+      fillGeometry.setIndex(fillIndices);
+      fillGeometry.computeBoundingSphere();
 
-      const material = new THREE.MeshLambertMaterial({
+      const Material = options.unlit ? THREE.MeshBasicMaterial : THREE.MeshLambertMaterial;
+      const material = new Material({
         color: parsedColor.color,
         opacity: parsedColor.opacity,
         transparent: parsedColor.opacity < 1,
         side: THREE.DoubleSide,
-        depthWrite: parsedColor.opacity >= 1
+        depthWrite: parsedColor.opacity >= 1,
+        polygonOffset: !!options.enginery,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1
       });
       material.userData.baseOpacity = parsedColor.opacity;
-      group.add(new THREE.Mesh(geometry, material));
+      material.userData.enginery = !!options.enginery;
+      group.add(new THREE.Mesh(fillGeometry, material));
     }
 
-    if (contourIndices.length) {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", attributes.position.clone());
-      geometry.setIndex(contourIndices);
+    if (contourIndices.length || (options.enginery && fillGeometry)) {
+      let geometry;
+      if (contourIndices.length) {
+        geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", attributes.position.clone());
+        geometry.setIndex(contourIndices);
+      } else {
+        geometry = new THREE.EdgesGeometry(fillGeometry);
+      }
+      const contourOpacity = options.enginery ? 1 : parsedColor.opacity;
       const material = new THREE.LineBasicMaterial({
-        color: parsedColor.color.clone().multiplyScalar(0.55),
-        transparent: parsedColor.opacity < 1,
-        opacity: parsedColor.opacity
+        color: options.enginery
+          ? parsedColor.color
+          : parsedColor.color.clone().multiplyScalar(0.55),
+        transparent: contourOpacity < 1,
+        opacity: contourOpacity
       });
-      material.userData.baseOpacity = parsedColor.opacity;
+      material.userData.baseOpacity = contourOpacity;
+      material.userData.enginery = !!options.enginery;
+      material.userData.fixedOpacity = !!options.enginery;
       group.add(new THREE.LineSegments(geometry, material));
     }
 
     return group;
   }
 
-  function buildModel(model) {
+  function buildModel(model, engineryById, engineryObjects) {
     const group = new THREE.Group();
     group.name = "model-" + model.id;
     group.userData.modelId = model.id;
     for (const surface of model.constructionSurfaces || [])
-      group.add(buildConstructionSurface(surface));
+      group.add(buildSurface(surface));
+
+    for (const surface of model.enginerySurfaces || []) {
+      const engineryId = surface.DeviceId === undefined
+        ? surface.engineryID : surface.DeviceId;
+      const enginery = engineryById.get(String(engineryId));
+      if (!enginery || !LIGHT_COLORS[enginery.type] || !isRenderSurface(surface))
+        continue;
+
+      const object = buildSurface(surface, {
+        color: LIGHT_COLORS[enginery.type],
+        enginery: true,
+        unlit: true
+      });
+      object.name = "enginery-" + engineryId;
+      object.visible = false;
+      object.userData.engineryId = engineryId;
+      object.userData.modelId = model.id;
+      object.userData.presented = false;
+      group.add(object);
+
+      const key = String(engineryId);
+      if (!engineryObjects.has(key))
+        engineryObjects.set(key, []);
+      engineryObjects.get(key).push(object);
+    }
     return group;
   }
 
@@ -166,6 +226,9 @@
       this.project = project;
       this.locations = new Map((project.locations || []).map((item) => [String(item.id), item]));
       this.models = new Map();
+      this.engineryObjects = new Map();
+      this.engineryStates = new Map();
+      this.engineryById = new Map((project.engineries || []).map((item) => [String(item.id), item]));
       this.currentCenter = new THREE.Vector3();
       this.disposed = false;
 
@@ -186,7 +249,7 @@
       this.scene.add(light);
 
       for (const model of project.models || []) {
-        const object = buildModel(model);
+        const object = buildModel(model, this.engineryById, this.engineryObjects);
         object.visible = false;
         this.models.set(String(model.id), object);
         this.scene.add(object);
@@ -242,6 +305,67 @@
       };
     }
 
+    setLocationEngineries(locationId) {
+      const location = this.locations.get(String(locationId));
+      const presented = new Set();
+      for (const model of (location && location.models) || []) {
+        for (const control of model.controls || [])
+          presented.add(String(control.engineryID));
+      }
+
+      for (const [id, objects] of this.engineryObjects) {
+        const isPresented = presented.has(id);
+        for (const object of objects) {
+          object.userData.presented = isPresented;
+          object.visible = isPresented;
+        }
+      }
+    }
+
+    updateEngineryState(engineryId, field, value) {
+      const key = String(engineryId);
+      if (!this.engineryObjects.has(key))
+        return;
+
+      while (value !== null && typeof value === "object" &&
+             Object.prototype.hasOwnProperty.call(value, "value"))
+        value = value.value;
+
+      const state = this.engineryStates.get(key) || { on: null, brightness: null };
+      if (field === "On")
+        state.on = value === true || value === 1 || value === "1" || value === "true";
+      else if (field === "BrightnessLevel" || field === "GroupLevel") {
+        const level = Number(value);
+        if (Number.isFinite(level))
+          state.brightness = THREE.MathUtils.clamp(level, 0, 100);
+      } else {
+        return;
+      }
+      this.engineryStates.set(key, state);
+
+      const opacity = state.on === false
+        ? 0
+        : (state.brightness === null ? 1 : state.brightness / 100);
+      for (const object of this.engineryObjects.get(key)) {
+        const model = this.models.get(String(object.userData.modelId));
+        const modelOpacity = model ? (model.userData.opacity || 0) : 0;
+        object.traverse((child) => {
+          if (!child.material)
+            return;
+          if (child.material.userData.fixedOpacity) {
+            child.material.opacity = 1;
+            child.material.transparent = false;
+            child.material.depthWrite = true;
+            return;
+          }
+          child.material.userData.baseOpacity = opacity;
+          child.material.opacity = opacity * modelOpacity;
+          child.material.transparent = child.material.opacity < 1;
+          child.material.depthWrite = child.material.opacity >= 0.999;
+        });
+      }
+    }
+
     applyState(state) {
       this.camera.position.copy(state.position);
       this.currentCenter.copy(state.center);
@@ -260,6 +384,12 @@
         object.traverse((child) => {
           if (!child.material)
             return;
+          if (child.material.userData.fixedOpacity) {
+            child.material.opacity = 1;
+            child.material.transparent = false;
+            child.material.depthWrite = true;
+            return;
+          }
           const baseOpacity = child.material.userData.baseOpacity === undefined
             ? 1 : child.material.userData.baseOpacity;
           child.material.opacity = baseOpacity * info.opacity;
@@ -273,6 +403,7 @@
       const arrangement = this.arrangementFor(locationId);
       if (!arrangement)
         return false;
+      this.setLocationEngineries(locationId);
       const target = this.stateFor(arrangement);
       if (animate === false) {
         this.transition = null;
