@@ -80,16 +80,35 @@
     );
   }
 
-  const LIGHT_COLORS = {
-    DimmingLight: "#e42583",
-    DynamicLight: "#ffff33",
-    EmergencyUnit: "#04ff1c",
-    RGBLight: "#e42583",
-    RGBWLight: "#e42583",
-    RgbLight: "#e42583",
-    RgbwLight: "#e42583",
-    SwitchingLight: "#a821b6",
-    TunableWhiteLight: "#f9deb9"
+  const COLOR_SCHEMES = {
+    Default: {
+      background: "#212121",
+      lighting: {
+        DimmingLight: "#ff9900",
+        DynamicLight: "#ffff33",
+        EmergencyUnit: "#04ff1c",
+        RGBLight: "#ff9900",
+        RGBWLight: "#ff9900",
+        RgbLight: "#ff9900",
+        RgbwLight: "#ff9900",
+        SwitchingLight: "#ffd800",
+        TunableWhiteLight: "#f9deb9"
+      }
+    },
+    Awada: {
+      background: "#9b9b9b",
+      lighting: {
+        DimmingLight: "#e42583",
+        DynamicLight: "#ffff33",
+        EmergencyUnit: "#04ff1c",
+        RGBLight: "#e42583",
+        RGBWLight: "#e42583",
+        RgbLight: "#e42583",
+        RgbwLight: "#e42583",
+        SwitchingLight: "#a821b6",
+        TunableWhiteLight: "#f9deb9"
+      }
+    }
   };
 
   function isRenderSurface(surface) {
@@ -152,6 +171,7 @@
       });
       material.userData.baseOpacity = parsedColor.opacity;
       material.userData.enginery = !!options.enginery;
+      material.userData.engineryType = options.engineryType || "";
       group.add(new THREE.Mesh(fillGeometry, material));
     }
 
@@ -174,6 +194,7 @@
       });
       material.userData.baseOpacity = contourOpacity;
       material.userData.enginery = !!options.enginery;
+      material.userData.engineryType = options.engineryType || "";
       material.userData.fixedOpacity = !!options.enginery;
       group.add(new THREE.LineSegments(geometry, material));
     }
@@ -181,7 +202,7 @@
     return group;
   }
 
-  function buildModel(model, engineryById, engineryObjects) {
+  function buildModel(model, engineryById, engineryObjects, colorScheme) {
     const group = new THREE.Group();
     group.name = "model-" + model.id;
     group.userData.modelId = model.id;
@@ -192,12 +213,14 @@
       const engineryId = surface.DeviceId === undefined
         ? surface.engineryID : surface.DeviceId;
       const enginery = engineryById.get(String(engineryId));
-      if (!enginery || !LIGHT_COLORS[enginery.type] || !isRenderSurface(surface))
+      const color = colorScheme.lighting[enginery && enginery.type];
+      if (!enginery || !color || !isRenderSurface(surface))
         continue;
 
       const object = buildSurface(surface, {
-        color: LIGHT_COLORS[enginery.type],
+        color: color,
         enginery: true,
+        engineryType: enginery.type,
         unlit: true
       });
       object.name = "enginery-" + engineryId;
@@ -216,7 +239,7 @@
   }
 
   class ProjectThreeView {
-    constructor(container, project) {
+    constructor(container, project, colorSchemeName) {
       if (!root.THREE)
         throw new Error("Не удалось загрузить Three.js");
       if (!container)
@@ -229,11 +252,12 @@
       this.engineryObjects = new Map();
       this.engineryStates = new Map();
       this.engineryById = new Map((project.engineries || []).map((item) => [String(item.id), item]));
+      this.colorSchemeName = COLOR_SCHEMES[colorSchemeName] ? colorSchemeName : "Awada";
       this.currentCenter = new THREE.Vector3();
       this.disposed = false;
 
       this.scene = new THREE.Scene();
-      this.scene.background = new THREE.Color(0xe9edf0);
+      this.scene.background = new THREE.Color(COLOR_SCHEMES[this.colorSchemeName].background);
 
       this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000000);
       this.camera.up.set(0, 0, 1);
@@ -249,7 +273,12 @@
       this.scene.add(light);
 
       for (const model of project.models || []) {
-        const object = buildModel(model, this.engineryById, this.engineryObjects);
+        const object = buildModel(
+          model,
+          this.engineryById,
+          this.engineryObjects,
+          COLOR_SCHEMES[this.colorSchemeName]
+        );
         object.visible = false;
         this.models.set(String(model.id), object);
         this.scene.add(object);
@@ -268,6 +297,23 @@
       this.renderer.setSize(width, height, false);
       this.camera.aspect = width / height;
       this.camera.updateProjectionMatrix();
+    }
+
+    setColorScheme(name) {
+      const scheme = COLOR_SCHEMES[name];
+      if (!scheme)
+        return false;
+      this.colorSchemeName = name;
+      this.scene.background.set(scheme.background);
+      this.scene.traverse((object) => {
+        const material = object.material;
+        if (!material || !material.userData.enginery)
+          return;
+        const color = scheme.lighting[material.userData.engineryType];
+        if (color)
+          material.color.set(color);
+      });
+      return true;
     }
 
     arrangementFor(locationId) {

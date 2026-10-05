@@ -14,6 +14,7 @@
         locations: [],
         expandedLocations: {},
         currentLocationId: null,
+        colorScheme: "Awada",
         view3dError: "",
         project: null,
         unpacked: [],
@@ -159,7 +160,7 @@
           return;
         try {
           const container = document.getElementById("three-view-container");
-          this._threeView = new ProjectThreeView(container, this._model);
+          this._threeView = new ProjectThreeView(container, this._model, this.colorScheme);
           const rootId = this._model.rootLocationID;
           const first = this.locations.find((location) =>
             location.id === rootId && location.arrangements && location.arrangements.length
@@ -182,6 +183,10 @@
       selectLocation(locationId) {
         if (this._threeView && this._threeView.goToLocation(locationId, true))
           this.currentLocationId = locationId;
+      },
+      changeColorScheme() {
+        if (this._threeView)
+          this._threeView.setColorScheme(this.colorScheme);
       },
       locationTitle(location) {
         return location.title || location.label ||

@@ -218,6 +218,10 @@ table { width: max-content; min-width: 100%; }
   font-size: 18px;
 }
 
+.color-scheme-select {
+  margin-top: 14px;
+}
+
 .location-tree {
   display: flex;
   flex-direction: column;
