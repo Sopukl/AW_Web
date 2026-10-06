@@ -110,6 +110,13 @@
       }
     }
   };
+  const CONSTRUCTION_LAYER = 1;
+  const DEFAULT_SHADOW_OPTIONS = {
+    offsetX: 5,
+    offsetY: 5,
+    opacity: 0.8,
+    shadowColor: "#000000"
+  };
 
   function isRenderSurface(surface) {
     return surface.Signature === "S" || surface.Signature === 83;
@@ -206,8 +213,11 @@
     const group = new THREE.Group();
     group.name = "model-" + model.id;
     group.userData.modelId = model.id;
-    for (const surface of model.constructionSurfaces || [])
-      group.add(buildSurface(surface));
+    for (const surface of model.constructionSurfaces || []) {
+      const construction = buildSurface(surface);
+      construction.traverse((object) => object.layers.set(CONSTRUCTION_LAYER));
+      group.add(construction);
+    }
 
     for (const surface of model.enginerySurfaces || []) {
       const engineryId = surface.DeviceId === undefined
@@ -239,7 +249,7 @@
   }
 
   class ProjectThreeView {
-    constructor(container, project, colorSchemeName) {
+    constructor(container, project, colorSchemeName, shadowOptions) {
       if (!root.THREE)
         throw new Error("Не удалось загрузить Three.js");
       if (!container)
@@ -253,6 +263,7 @@
       this.engineryStates = new Map();
       this.engineryById = new Map((project.engineries || []).map((item) => [String(item.id), item]));
       this.colorSchemeName = COLOR_SCHEMES[colorSchemeName] ? colorSchemeName : "Awada";
+      this.shadowOptions = Object.assign({}, DEFAULT_SHADOW_OPTIONS, shadowOptions || {});
       this.currentCenter = new THREE.Vector3();
       this.disposed = false;
 
@@ -261,6 +272,7 @@
 
       this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000000);
       this.camera.up.set(0, 0, 1);
+      this.camera.layers.enable(CONSTRUCTION_LAYER);
 
       this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
       this.renderer.setPixelRatio(Math.min(root.devicePixelRatio || 1, 2));
@@ -284,11 +296,136 @@
         this.scene.add(object);
       }
 
+      this.initShadow();
       this.resizeObserver = new ResizeObserver(() => this.resize());
       this.resizeObserver.observe(container);
       this.resize();
       this.renderFrame = this.renderFrame.bind(this);
       this.animationFrame = requestAnimationFrame(this.renderFrame);
+    }
+
+    initShadow() {
+      const targetOptions = {
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat,
+        depthBuffer: true,
+        stencilBuffer: false
+      };
+      this.shadowMaskTarget = new THREE.WebGLRenderTarget(1, 1, targetOptions);
+      this.shadowBlurTarget = new THREE.WebGLRenderTarget(1, 1, Object.assign({}, targetOptions, {
+        depthBuffer: false
+      }));
+      this.shadowMaskTarget.texture.colorSpace = THREE.NoColorSpace;
+      this.shadowBlurTarget.texture.colorSpace = THREE.NoColorSpace;
+
+      this.shadowMaskMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        side: THREE.DoubleSide
+      });
+      this.postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      this.postGeometry = new THREE.PlaneGeometry(2, 2);
+
+      this.blurMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+          sourceTexture: { value: this.shadowMaskTarget.texture },
+          texelSize: { value: new THREE.Vector2(1, 1) }
+        },
+        vertexShader: [
+          "varying vec2 vUv;",
+          "void main() {",
+          "  vUv = uv;",
+          "  gl_Position = vec4(position.xy, 0.0, 1.0);",
+          "}"
+        ].join("\n"),
+        fragmentShader: [
+          "uniform sampler2D sourceTexture;",
+          "uniform vec2 texelSize;",
+          "varying vec2 vUv;",
+          "void main() {",
+          "  float mask = 0.0;",
+          "  for (int y = -2; y <= 2; ++y) {",
+          "    for (int x = -2; x <= 2; ++x) {",
+          "      vec2 shift = vec2(float(x), float(y)) * texelSize;",
+          "      mask += texture2D(sourceTexture, vUv + shift).r;",
+          "    }",
+          "  }",
+          "  mask /= 25.0;",
+          "  gl_FragColor = vec4(vec3(mask), 1.0);",
+          "}"
+        ].join("\n"),
+        depthTest: false,
+        depthWrite: false
+      });
+      this.blurScene = new THREE.Scene();
+      this.blurScene.add(new THREE.Mesh(this.postGeometry, this.blurMaterial));
+
+      this.shadowCompositeMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+          shadowTexture: { value: this.shadowBlurTarget.texture },
+          texelSize: { value: new THREE.Vector2(1, 1) },
+          offset: { value: new THREE.Vector2() },
+          shadowColor: { value: new THREE.Color() },
+          shadowOpacity: { value: 0.8 }
+        },
+        vertexShader: [
+          "varying vec2 vUv;",
+          "void main() {",
+          "  vUv = uv;",
+          "  gl_Position = vec4(position.xy, 0.0, 1.0);",
+          "}"
+        ].join("\n"),
+        fragmentShader: [
+          "uniform sampler2D shadowTexture;",
+          "uniform vec2 texelSize;",
+          "uniform vec2 offset;",
+          "uniform vec3 shadowColor;",
+          "uniform float shadowOpacity;",
+          "varying vec2 vUv;",
+          "void main() {",
+          "  vec2 screenOffset = vec2(offset.x, -offset.y) * texelSize;",
+          "  float mask = texture2D(shadowTexture, vUv - screenOffset).r;",
+          "  gl_FragColor = vec4(shadowColor, mask * shadowOpacity);",
+          "}"
+        ].join("\n"),
+        transparent: true,
+        depthTest: false,
+        depthWrite: false
+      });
+      this.shadowScene = new THREE.Scene();
+      this.shadowScene.add(new THREE.Mesh(this.postGeometry, this.shadowCompositeMaterial));
+      this.renderSize = new THREE.Vector2();
+      this.setShadowOptions(this.shadowOptions);
+    }
+
+    setShadowOptions(options) {
+      options = options || {};
+      if (options.offset && typeof options.offset === "object") {
+        if (options.offset.x !== undefined)
+          options.offsetX = options.offset.x;
+        if (options.offset.y !== undefined)
+          options.offsetY = options.offset.y;
+      }
+      if (Number.isFinite(Number(options.offsetX)))
+        this.shadowOptions.offsetX = Number(options.offsetX);
+      if (Number.isFinite(Number(options.offsetY)))
+        this.shadowOptions.offsetY = Number(options.offsetY);
+      if (Number.isFinite(Number(options.opacity)))
+        this.shadowOptions.opacity = THREE.MathUtils.clamp(Number(options.opacity), 0, 1);
+      if (options.shadowColor !== undefined)
+        this.shadowOptions.shadowColor = String(options.shadowColor);
+
+      if (this.shadowCompositeMaterial) {
+        const uniforms = this.shadowCompositeMaterial.uniforms;
+        const pixelRatio = this.renderer.getPixelRatio();
+        uniforms.offset.value.set(
+          this.shadowOptions.offsetX * pixelRatio,
+          this.shadowOptions.offsetY * pixelRatio
+        );
+        uniforms.shadowOpacity.value = this.shadowOptions.opacity;
+        uniforms.shadowColor.value.set(this.shadowOptions.shadowColor);
+      }
+      return Object.assign({}, this.shadowOptions);
     }
 
     resize() {
@@ -297,6 +434,14 @@
       this.renderer.setSize(width, height, false);
       this.camera.aspect = width / height;
       this.camera.updateProjectionMatrix();
+      this.renderer.getDrawingBufferSize(this.renderSize);
+      const renderWidth = Math.max(Math.floor(this.renderSize.x), 1);
+      const renderHeight = Math.max(Math.floor(this.renderSize.y), 1);
+      this.shadowMaskTarget.setSize(renderWidth, renderHeight);
+      this.shadowBlurTarget.setSize(renderWidth, renderHeight);
+      this.blurMaterial.uniforms.texelSize.value.set(1 / renderWidth, 1 / renderHeight);
+      this.shadowCompositeMaterial.uniforms.texelSize.value.set(1 / renderWidth, 1 / renderHeight);
+      this.setShadowOptions(this.shadowOptions);
     }
 
     setColorScheme(name) {
@@ -482,6 +627,48 @@
       };
     }
 
+    renderSceneWithShadow() {
+      const renderer = this.renderer;
+      const previousTarget = renderer.getRenderTarget();
+      const previousAutoClear = renderer.autoClear;
+      const previousClearColor = renderer.getClearColor(new THREE.Color());
+      const previousClearAlpha = renderer.getClearAlpha();
+      const previousBackground = this.scene.background;
+      const previousOverride = this.scene.overrideMaterial;
+      const previousLayers = this.camera.layers.mask;
+
+      renderer.autoClear = false;
+
+      this.scene.background = null;
+      this.scene.overrideMaterial = this.shadowMaskMaterial;
+      this.camera.layers.set(CONSTRUCTION_LAYER);
+      renderer.setRenderTarget(this.shadowMaskTarget);
+      renderer.setClearColor(0x000000, 1);
+      renderer.clear(true, true, true);
+      renderer.render(this.scene, this.camera);
+
+      this.scene.overrideMaterial = previousOverride;
+      this.camera.layers.mask = previousLayers;
+      renderer.setRenderTarget(this.shadowBlurTarget);
+      renderer.setClearColor(0x000000, 1);
+      renderer.clear(true, false, false);
+      renderer.render(this.blurScene, this.postCamera);
+
+      renderer.setRenderTarget(null);
+      renderer.setClearColor(previousBackground || previousClearColor, 1);
+      renderer.clear(true, true, true);
+      renderer.render(this.shadowScene, this.postCamera);
+      renderer.clearDepth();
+      renderer.render(this.scene, this.camera);
+
+      this.scene.background = previousBackground;
+      this.scene.overrideMaterial = previousOverride;
+      this.camera.layers.mask = previousLayers;
+      renderer.setRenderTarget(previousTarget);
+      renderer.setClearColor(previousClearColor, previousClearAlpha);
+      renderer.autoClear = previousAutoClear;
+    }
+
     renderFrame(now) {
       if (this.disposed)
         return;
@@ -492,7 +679,7 @@
         if (raw >= 1)
           this.transition = null;
       }
-      this.renderer.render(this.scene, this.camera);
+      this.renderSceneWithShadow();
       this.animationFrame = requestAnimationFrame(this.renderFrame);
     }
 
@@ -500,6 +687,12 @@
       this.disposed = true;
       cancelAnimationFrame(this.animationFrame);
       this.resizeObserver.disconnect();
+      this.shadowMaskTarget.dispose();
+      this.shadowBlurTarget.dispose();
+      this.shadowMaskMaterial.dispose();
+      this.blurMaterial.dispose();
+      this.shadowCompositeMaterial.dispose();
+      this.postGeometry.dispose();
       this.scene.traverse((object) => {
         if (object.geometry)
           object.geometry.dispose();
