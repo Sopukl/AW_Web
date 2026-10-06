@@ -454,6 +454,10 @@
         const material = object.material;
         if (!material || !material.userData.enginery)
           return;
+        if (material.userData.notPresented) {
+          material.color.set(0x808080);
+          return;
+        }
         const color = scheme.lighting[material.userData.engineryType];
         if (color)
           material.color.set(color);
@@ -508,7 +512,23 @@
         const isPresented = presented.has(id);
         for (const object of objects) {
           object.userData.presented = isPresented;
-          object.visible = isPresented;
+          object.visible = true;
+          object.traverse((child) => {
+            if (!child.material)
+              return;
+            child.material.userData.notPresented = !isPresented;
+            if (!isPresented) {
+              child.material.color.set(0x808080);
+              child.material.opacity = 1;
+              child.material.transparent = false;
+              child.material.depthWrite = true;
+              return;
+            }
+            const scheme = COLOR_SCHEMES[this.colorSchemeName];
+            const color = scheme.lighting[child.material.userData.engineryType];
+            if (color)
+              child.material.color.set(color);
+          });
         }
       }
     }
@@ -543,6 +563,12 @@
         object.traverse((child) => {
           if (!child.material)
             return;
+          if (child.material.userData.notPresented) {
+            child.material.opacity = 1;
+            child.material.transparent = false;
+            child.material.depthWrite = true;
+            return;
+          }
           if (child.material.userData.fixedOpacity) {
             child.material.opacity = 1;
             child.material.transparent = false;
@@ -575,6 +601,12 @@
         object.traverse((child) => {
           if (!child.material)
             return;
+          if (child.material.userData.notPresented) {
+            child.material.opacity = 1;
+            child.material.transparent = false;
+            child.material.depthWrite = true;
+            return;
+          }
           if (child.material.userData.fixedOpacity) {
             child.material.opacity = 1;
             child.material.transparent = false;
