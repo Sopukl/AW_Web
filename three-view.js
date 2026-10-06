@@ -110,7 +110,11 @@
       }
     }
   };
-  const CONSTRUCTION_LAYER = 1;
+  const OPAQUE_CONSTRUCTION_LAYER = 1;
+  const CONTROL_LAYER = 2;
+  const TRANSPARENT_DEPTH_LAYER = 3;
+  const TRANSPARENT_COLOR_LAYER = 4;
+  const SHADOW_LAYER = 5;
   const DEFAULT_SHADOW_OPTIONS = {
     offsetX: 5,
     offsetY: 5,
@@ -179,7 +183,34 @@
       material.userData.baseOpacity = parsedColor.opacity;
       material.userData.enginery = !!options.enginery;
       material.userData.engineryType = options.engineryType || "";
-      group.add(new THREE.Mesh(fillGeometry, material));
+      const mesh = new THREE.Mesh(fillGeometry, material);
+      if (options.enginery) {
+        material.depthWrite = false;
+        material.userData.renderPass = "control";
+        mesh.layers.set(CONTROL_LAYER);
+      } else if (options.construction && parsedColor.opacity < 1) {
+        material.depthWrite = false;
+        material.userData.renderPass = "transparentColor";
+        mesh.layers.set(TRANSPARENT_COLOR_LAYER);
+        mesh.layers.enable(SHADOW_LAYER);
+
+        const depthMaterial = new THREE.MeshBasicMaterial({
+          colorWrite: false,
+          depthWrite: true,
+          depthTest: true,
+          side: THREE.DoubleSide
+        });
+        depthMaterial.userData.renderPass = "transparentDepth";
+        const depthMesh = new THREE.Mesh(fillGeometry, depthMaterial);
+        depthMesh.layers.set(TRANSPARENT_DEPTH_LAYER);
+        group.add(depthMesh);
+      } else {
+        material.depthWrite = true;
+        material.userData.renderPass = "opaqueConstruction";
+        mesh.layers.set(OPAQUE_CONSTRUCTION_LAYER);
+        mesh.layers.enable(SHADOW_LAYER);
+      }
+      group.add(mesh);
     }
 
     if (contourIndices.length || (options.enginery && fillGeometry)) {
@@ -203,7 +234,23 @@
       material.userData.enginery = !!options.enginery;
       material.userData.engineryType = options.engineryType || "";
       material.userData.fixedOpacity = !!options.enginery;
-      group.add(new THREE.LineSegments(geometry, material));
+      const lines = new THREE.LineSegments(geometry, material);
+      if (options.enginery) {
+        material.depthWrite = false;
+        material.userData.renderPass = "control";
+        lines.layers.set(CONTROL_LAYER);
+      } else if (options.construction && parsedColor.opacity < 1) {
+        material.depthWrite = false;
+        material.userData.renderPass = "transparentColor";
+        lines.layers.set(TRANSPARENT_COLOR_LAYER);
+        lines.layers.enable(SHADOW_LAYER);
+      } else {
+        material.depthWrite = true;
+        material.userData.renderPass = "opaqueConstruction";
+        lines.layers.set(OPAQUE_CONSTRUCTION_LAYER);
+        lines.layers.enable(SHADOW_LAYER);
+      }
+      group.add(lines);
     }
 
     return group;
@@ -213,11 +260,8 @@
     const group = new THREE.Group();
     group.name = "model-" + model.id;
     group.userData.modelId = model.id;
-    for (const surface of model.constructionSurfaces || []) {
-      const construction = buildSurface(surface);
-      construction.traverse((object) => object.layers.set(CONSTRUCTION_LAYER));
-      group.add(construction);
-    }
+    for (const surface of model.constructionSurfaces || [])
+      group.add(buildSurface(surface, { construction: true }));
 
     for (const surface of model.enginerySurfaces || []) {
       const engineryId = surface.DeviceId === undefined
@@ -272,7 +316,6 @@
 
       this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000000);
       this.camera.up.set(0, 0, 1);
-      this.camera.layers.enable(CONSTRUCTION_LAYER);
 
       this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
       this.renderer.setPixelRatio(Math.min(root.devicePixelRatio || 1, 2));
@@ -521,7 +564,7 @@
               child.material.color.set(0x808080);
               child.material.opacity = 1;
               child.material.transparent = false;
-              child.material.depthWrite = true;
+              child.material.depthWrite = false;
               return;
             }
             const scheme = COLOR_SCHEMES[this.colorSchemeName];
@@ -566,19 +609,19 @@
           if (child.material.userData.notPresented) {
             child.material.opacity = 1;
             child.material.transparent = false;
-            child.material.depthWrite = true;
+            child.material.depthWrite = false;
             return;
           }
           if (child.material.userData.fixedOpacity) {
             child.material.opacity = 1;
             child.material.transparent = false;
-            child.material.depthWrite = true;
+            child.material.depthWrite = false;
             return;
           }
           child.material.userData.baseOpacity = opacity;
           child.material.opacity = opacity * modelOpacity;
           child.material.transparent = child.material.opacity < 1;
-          child.material.depthWrite = child.material.opacity >= 0.999;
+          child.material.depthWrite = false;
         });
       }
     }
@@ -601,23 +644,34 @@
         object.traverse((child) => {
           if (!child.material)
             return;
+          const renderPass = child.material.userData.renderPass;
+          if (renderPass === "transparentDepth") {
+            child.material.opacity = 1;
+            child.material.transparent = false;
+            child.material.colorWrite = false;
+            child.material.depthWrite = true;
+            return;
+          }
           if (child.material.userData.notPresented) {
             child.material.opacity = 1;
             child.material.transparent = false;
-            child.material.depthWrite = true;
+            child.material.depthWrite = false;
             return;
           }
           if (child.material.userData.fixedOpacity) {
             child.material.opacity = 1;
             child.material.transparent = false;
-            child.material.depthWrite = true;
+            child.material.depthWrite = false;
             return;
           }
           const baseOpacity = child.material.userData.baseOpacity === undefined
             ? 1 : child.material.userData.baseOpacity;
           child.material.opacity = baseOpacity * info.opacity;
           child.material.transparent = child.material.opacity < 1;
-          child.material.depthWrite = child.material.opacity >= 0.999;
+          if (renderPass === "opaqueConstruction")
+            child.material.depthWrite = true;
+          else
+            child.material.depthWrite = false;
         });
       }
     }
@@ -659,6 +713,32 @@
       };
     }
 
+    renderModelsInOrder() {
+      const models = Array.from(this.models.values());
+      const visibility = models.map((model) => model.visible);
+      const passes = [
+        OPAQUE_CONSTRUCTION_LAYER,
+        CONTROL_LAYER,
+        TRANSPARENT_DEPTH_LAYER,
+        TRANSPARENT_COLOR_LAYER
+      ];
+
+      models.forEach((model) => { model.visible = false; });
+      for (let index = 0; index < models.length; index++) {
+        if (!visibility[index])
+          continue;
+        const model = models[index];
+        model.visible = true;
+        for (const layer of passes) {
+          this.camera.layers.set(layer);
+          this.camera.layers.enable(0);
+          this.renderer.render(this.scene, this.camera);
+        }
+        model.visible = false;
+      }
+      models.forEach((model, index) => { model.visible = visibility[index]; });
+    }
+
     renderSceneWithShadow() {
       const renderer = this.renderer;
       const previousTarget = renderer.getRenderTarget();
@@ -673,7 +753,7 @@
 
       this.scene.background = null;
       this.scene.overrideMaterial = this.shadowMaskMaterial;
-      this.camera.layers.set(CONSTRUCTION_LAYER);
+      this.camera.layers.set(SHADOW_LAYER);
       renderer.setRenderTarget(this.shadowMaskTarget);
       renderer.setClearColor(0x000000, 1);
       renderer.clear(true, true, true);
@@ -691,7 +771,7 @@
       renderer.clear(true, true, true);
       renderer.render(this.shadowScene, this.postCamera);
       renderer.clearDepth();
-      renderer.render(this.scene, this.camera);
+      this.renderModelsInOrder();
 
       this.scene.background = previousBackground;
       this.scene.overrideMaterial = previousOverride;
