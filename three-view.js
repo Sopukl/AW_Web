@@ -83,6 +83,7 @@
   const COLOR_SCHEMES = {
     Default: {
       background: "#212121",
+      navigation: "#000000",
       lighting: {
         DimmingLight: "#ff9900",
         DynamicLight: "#ffff33",
@@ -97,6 +98,7 @@
     },
     Awada: {
       background: "#9b9b9b",
+      navigation: "#ffffff",
       lighting: {
         DimmingLight: "#e42583",
         DynamicLight: "#ffff33",
@@ -111,19 +113,37 @@
     }
   };
   const OPAQUE_CONSTRUCTION_LAYER = 1;
-  const CONTROL_LAYER = 2;
-  const TRANSPARENT_DEPTH_LAYER = 3;
-  const TRANSPARENT_COLOR_LAYER = 4;
-  const SHADOW_LAYER = 5;
-  const DEFAULT_SHADOW_OPTIONS = {
-    offsetX: 5,
-    offsetY: 5,
-    opacity: 0.8,
-    shadowColor: "#000000"
-  };
-
+  const NAVIGATION_LAYER = 2;
+  const CONTROL_LAYER = 3;
+  const TRANSPARENT_DEPTH_LAYER = 4;
+  const TRANSPARENT_COLOR_LAYER = 5;
+  const OPAQUE_CONSTRUCTION_ORDER = 100;
+  const NAVIGATION_ORDER = 200;
+  const CONTROL_ORDER = 300;
+  const TRANSPARENT_DEPTH_ORDER = 400;
+  const TRANSPARENT_COLOR_ORDER = 500;
   function isRenderSurface(surface) {
     return surface.Signature === "S" || surface.Signature === 83;
+  }
+
+  function isFlatNavigationSurface(surface) {
+    for (const subsurface of surface.subsurfaces || []) {
+      const vertices = decodeVertices(subsurface.vertices);
+      const indices = decodeIndices(subsurface.indices);
+      const fillCount = Math.min(Number(subsurface.fillCount) || 0, indices.length);
+      for (let index = 0; index + 2 < fillCount; index += 3) {
+        const a = vertices[indices[index]];
+        const b = vertices[indices[index + 1]];
+        const c = vertices[indices[index + 2]];
+        if (!a || !b || !c)
+          continue;
+        if (Math.abs(a[2] - b[2]) > 1 ||
+            Math.abs(a[2] - c[2]) > 1 ||
+            Math.abs(b[2] - c[2]) > 1)
+          return false;
+      }
+    }
+    return true;
   }
 
   function buildSurface(surface, options) {
@@ -188,11 +208,18 @@
         material.depthWrite = false;
         material.userData.renderPass = "control";
         mesh.layers.set(CONTROL_LAYER);
+        mesh.renderOrder = CONTROL_ORDER;
+      } else if (options.navigation) {
+        material.depthWrite = false;
+        material.transparent = true;
+        material.userData.renderPass = "navigation";
+        mesh.layers.set(NAVIGATION_LAYER);
+        mesh.renderOrder = NAVIGATION_ORDER;
       } else if (options.construction && parsedColor.opacity < 1) {
         material.depthWrite = false;
         material.userData.renderPass = "transparentColor";
         mesh.layers.set(TRANSPARENT_COLOR_LAYER);
-        mesh.layers.enable(SHADOW_LAYER);
+        mesh.renderOrder = TRANSPARENT_COLOR_ORDER;
 
         const depthMaterial = new THREE.MeshBasicMaterial({
           colorWrite: false,
@@ -203,17 +230,18 @@
         depthMaterial.userData.renderPass = "transparentDepth";
         const depthMesh = new THREE.Mesh(fillGeometry, depthMaterial);
         depthMesh.layers.set(TRANSPARENT_DEPTH_LAYER);
+        depthMesh.renderOrder = TRANSPARENT_DEPTH_ORDER;
         group.add(depthMesh);
       } else {
         material.depthWrite = true;
         material.userData.renderPass = "opaqueConstruction";
         mesh.layers.set(OPAQUE_CONSTRUCTION_LAYER);
-        mesh.layers.enable(SHADOW_LAYER);
+        mesh.renderOrder = OPAQUE_CONSTRUCTION_ORDER;
       }
       group.add(mesh);
     }
 
-    if (contourIndices.length || (options.enginery && fillGeometry)) {
+    if (!options.navigation && (contourIndices.length || (options.enginery && fillGeometry))) {
       let geometry;
       if (contourIndices.length) {
         geometry = new THREE.BufferGeometry();
@@ -239,16 +267,17 @@
         material.depthWrite = false;
         material.userData.renderPass = "control";
         lines.layers.set(CONTROL_LAYER);
+        lines.renderOrder = CONTROL_ORDER;
       } else if (options.construction && parsedColor.opacity < 1) {
         material.depthWrite = false;
         material.userData.renderPass = "transparentColor";
         lines.layers.set(TRANSPARENT_COLOR_LAYER);
-        lines.layers.enable(SHADOW_LAYER);
+        lines.renderOrder = TRANSPARENT_COLOR_ORDER;
       } else {
         material.depthWrite = true;
         material.userData.renderPass = "opaqueConstruction";
         lines.layers.set(OPAQUE_CONSTRUCTION_LAYER);
-        lines.layers.enable(SHADOW_LAYER);
+        lines.renderOrder = OPAQUE_CONSTRUCTION_ORDER;
       }
       group.add(lines);
     }
@@ -256,12 +285,36 @@
     return group;
   }
 
-  function buildModel(model, engineryById, engineryObjects, colorScheme) {
+  function buildModel(model, engineryById, engineryObjects, navigationObjects, colorScheme) {
     const group = new THREE.Group();
     group.name = "model-" + model.id;
     group.userData.modelId = model.id;
+    group.userData.navigationSurfaces = [];
     for (const surface of model.constructionSurfaces || [])
       group.add(buildSurface(surface, { construction: true }));
+
+    for (const surface of model.navigationSurfaces || []) {
+      const locationId = surface.LocationId === undefined
+        ? surface.locationID : surface.LocationId;
+      const object = buildSurface(surface, {
+        color: colorScheme.navigation,
+        navigation: true
+      });
+      object.name = "navigation-" + locationId;
+      object.visible = false;
+      object.userData.locationId = locationId;
+      object.userData.modelId = model.id;
+      object.userData.flat = isFlatNavigationSurface(surface);
+      object.traverse((child) => {
+        if (child.material) {
+          child.material.userData.navigation = true;
+          child.userData.navigationLocationId = locationId;
+        }
+      });
+      group.userData.navigationSurfaces.push(object);
+      navigationObjects.push(object);
+      group.add(object);
+    }
 
     for (const surface of model.enginerySurfaces || []) {
       const engineryId = surface.DeviceId === undefined
@@ -293,7 +346,7 @@
   }
 
   class ProjectThreeView {
-    constructor(container, project, colorSchemeName, shadowOptions) {
+    constructor(container, project, colorSchemeName) {
       if (!root.THREE)
         throw new Error("Не удалось загрузить Three.js");
       if (!container)
@@ -305,9 +358,9 @@
       this.models = new Map();
       this.engineryObjects = new Map();
       this.engineryStates = new Map();
+      this.navigationObjects = [];
       this.engineryById = new Map((project.engineries || []).map((item) => [String(item.id), item]));
       this.colorSchemeName = COLOR_SCHEMES[colorSchemeName] ? colorSchemeName : "Awada";
-      this.shadowOptions = Object.assign({}, DEFAULT_SHADOW_OPTIONS, shadowOptions || {});
       this.currentCenter = new THREE.Vector3();
       this.disposed = false;
 
@@ -321,6 +374,11 @@
       this.renderer.setPixelRatio(Math.min(root.devicePixelRatio || 1, 2));
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       container.replaceChildren(this.renderer.domElement);
+      this.raycaster = new THREE.Raycaster();
+      this.raycaster.layers.set(NAVIGATION_LAYER);
+      this.pointer = new THREE.Vector2();
+      this.handleNavigationClick = this.handleNavigationClick.bind(this);
+      this.renderer.domElement.addEventListener("click", this.handleNavigationClick);
 
       this.scene.add(new THREE.HemisphereLight(0xffffff, 0x66717a, 1.25));
       const light = new THREE.DirectionalLight(0xffffff, 1.75);
@@ -332,6 +390,7 @@
           model,
           this.engineryById,
           this.engineryObjects,
+          this.navigationObjects,
           COLOR_SCHEMES[this.colorSchemeName]
         );
         object.visible = false;
@@ -339,136 +398,11 @@
         this.scene.add(object);
       }
 
-      this.initShadow();
       this.resizeObserver = new ResizeObserver(() => this.resize());
       this.resizeObserver.observe(container);
       this.resize();
       this.renderFrame = this.renderFrame.bind(this);
       this.animationFrame = requestAnimationFrame(this.renderFrame);
-    }
-
-    initShadow() {
-      const targetOptions = {
-        minFilter: THREE.LinearFilter,
-        magFilter: THREE.LinearFilter,
-        format: THREE.RGBAFormat,
-        depthBuffer: true,
-        stencilBuffer: false
-      };
-      this.shadowMaskTarget = new THREE.WebGLRenderTarget(1, 1, targetOptions);
-      this.shadowBlurTarget = new THREE.WebGLRenderTarget(1, 1, Object.assign({}, targetOptions, {
-        depthBuffer: false
-      }));
-      this.shadowMaskTarget.texture.colorSpace = THREE.NoColorSpace;
-      this.shadowBlurTarget.texture.colorSpace = THREE.NoColorSpace;
-
-      this.shadowMaskMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        side: THREE.DoubleSide
-      });
-      this.postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-      this.postGeometry = new THREE.PlaneGeometry(2, 2);
-
-      this.blurMaterial = new THREE.ShaderMaterial({
-        uniforms: {
-          sourceTexture: { value: this.shadowMaskTarget.texture },
-          texelSize: { value: new THREE.Vector2(1, 1) }
-        },
-        vertexShader: [
-          "varying vec2 vUv;",
-          "void main() {",
-          "  vUv = uv;",
-          "  gl_Position = vec4(position.xy, 0.0, 1.0);",
-          "}"
-        ].join("\n"),
-        fragmentShader: [
-          "uniform sampler2D sourceTexture;",
-          "uniform vec2 texelSize;",
-          "varying vec2 vUv;",
-          "void main() {",
-          "  float mask = 0.0;",
-          "  for (int y = -2; y <= 2; ++y) {",
-          "    for (int x = -2; x <= 2; ++x) {",
-          "      vec2 shift = vec2(float(x), float(y)) * texelSize;",
-          "      mask += texture2D(sourceTexture, vUv + shift).r;",
-          "    }",
-          "  }",
-          "  mask /= 25.0;",
-          "  gl_FragColor = vec4(vec3(mask), 1.0);",
-          "}"
-        ].join("\n"),
-        depthTest: false,
-        depthWrite: false
-      });
-      this.blurScene = new THREE.Scene();
-      this.blurScene.add(new THREE.Mesh(this.postGeometry, this.blurMaterial));
-
-      this.shadowCompositeMaterial = new THREE.ShaderMaterial({
-        uniforms: {
-          shadowTexture: { value: this.shadowBlurTarget.texture },
-          texelSize: { value: new THREE.Vector2(1, 1) },
-          offset: { value: new THREE.Vector2() },
-          shadowColor: { value: new THREE.Color() },
-          shadowOpacity: { value: 0.8 }
-        },
-        vertexShader: [
-          "varying vec2 vUv;",
-          "void main() {",
-          "  vUv = uv;",
-          "  gl_Position = vec4(position.xy, 0.0, 1.0);",
-          "}"
-        ].join("\n"),
-        fragmentShader: [
-          "uniform sampler2D shadowTexture;",
-          "uniform vec2 texelSize;",
-          "uniform vec2 offset;",
-          "uniform vec3 shadowColor;",
-          "uniform float shadowOpacity;",
-          "varying vec2 vUv;",
-          "void main() {",
-          "  vec2 screenOffset = vec2(offset.x, -offset.y) * texelSize;",
-          "  float mask = texture2D(shadowTexture, vUv - screenOffset).r;",
-          "  gl_FragColor = vec4(shadowColor, mask * shadowOpacity);",
-          "}"
-        ].join("\n"),
-        transparent: true,
-        depthTest: false,
-        depthWrite: false
-      });
-      this.shadowScene = new THREE.Scene();
-      this.shadowScene.add(new THREE.Mesh(this.postGeometry, this.shadowCompositeMaterial));
-      this.renderSize = new THREE.Vector2();
-      this.setShadowOptions(this.shadowOptions);
-    }
-
-    setShadowOptions(options) {
-      options = options || {};
-      if (options.offset && typeof options.offset === "object") {
-        if (options.offset.x !== undefined)
-          options.offsetX = options.offset.x;
-        if (options.offset.y !== undefined)
-          options.offsetY = options.offset.y;
-      }
-      if (Number.isFinite(Number(options.offsetX)))
-        this.shadowOptions.offsetX = Number(options.offsetX);
-      if (Number.isFinite(Number(options.offsetY)))
-        this.shadowOptions.offsetY = Number(options.offsetY);
-      if (Number.isFinite(Number(options.opacity)))
-        this.shadowOptions.opacity = THREE.MathUtils.clamp(Number(options.opacity), 0, 1);
-      if (options.shadowColor !== undefined)
-        this.shadowOptions.shadowColor = String(options.shadowColor);
-
-      if (this.shadowCompositeMaterial) {
-        const uniforms = this.shadowCompositeMaterial.uniforms;
-        const pixelRatio = this.renderer.getPixelRatio();
-        uniforms.offset.value.set(
-          this.shadowOptions.offsetX * pixelRatio,
-          this.shadowOptions.offsetY * pixelRatio
-        );
-        uniforms.shadowOpacity.value = this.shadowOptions.opacity;
-        uniforms.shadowColor.value.set(this.shadowOptions.shadowColor);
-      }
-      return Object.assign({}, this.shadowOptions);
     }
 
     resize() {
@@ -477,14 +411,28 @@
       this.renderer.setSize(width, height, false);
       this.camera.aspect = width / height;
       this.camera.updateProjectionMatrix();
-      this.renderer.getDrawingBufferSize(this.renderSize);
-      const renderWidth = Math.max(Math.floor(this.renderSize.x), 1);
-      const renderHeight = Math.max(Math.floor(this.renderSize.y), 1);
-      this.shadowMaskTarget.setSize(renderWidth, renderHeight);
-      this.shadowBlurTarget.setSize(renderWidth, renderHeight);
-      this.blurMaterial.uniforms.texelSize.value.set(1 / renderWidth, 1 / renderHeight);
-      this.shadowCompositeMaterial.uniforms.texelSize.value.set(1 / renderWidth, 1 / renderHeight);
-      this.setShadowOptions(this.shadowOptions);
+    }
+
+    handleNavigationClick(event) {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.set(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const intersections = this.raycaster.intersectObjects(this.navigationObjects, true);
+      const hit = intersections.find((item) => {
+        let object = item.object;
+        while (object) {
+          if (!object.visible)
+            return false;
+          object = object.parent;
+        }
+        return item.object.userData.navigationLocationId !== undefined &&
+          item.object.userData.navigationEnabled;
+      });
+      if (hit && typeof this.onNavigate === "function")
+        this.onNavigate(hit.object.userData.navigationLocationId);
     }
 
     setColorScheme(name) {
@@ -495,7 +443,13 @@
       this.scene.background.set(scheme.background);
       this.scene.traverse((object) => {
         const material = object.material;
-        if (!material || !material.userData.enginery)
+        if (!material)
+          return;
+        if (material.userData.navigation) {
+          material.color.set(scheme.navigation);
+          return;
+        }
+        if (!material.userData.enginery)
           return;
         if (material.userData.notPresented) {
           material.color.set(0x808080);
@@ -543,6 +497,48 @@
       };
     }
 
+    setLocationNavigations(locationId) {
+      const location = this.locations.get(String(locationId));
+      const locationModels = new Map(
+        ((location && location.models) || []).map((model) => [String(model.id), model])
+      );
+
+      for (const [modelId, model] of this.models) {
+        const surfaces = model.userData.navigationSurfaces || [];
+        const locationModel = locationModels.get(modelId);
+        const transitions = (locationModel && locationModel.transitions) || [];
+        const transitionTargets = new Set(
+          transitions.map((transition) => String(transition.locationID))
+        );
+        for (const surface of surfaces) {
+          const enabled = transitionTargets.has(String(surface.userData.locationId));
+          surface.userData.navigationEnabled = enabled;
+          surface.traverse((child) => {
+            if (child.userData.navigationLocationId !== undefined)
+              child.userData.navigationEnabled = enabled;
+          });
+        }
+        const current = surfaces.find((surface) =>
+          String(surface.userData.locationId) === String(locationId)
+        );
+        if (current) {
+          surfaces.forEach((surface) => { surface.visible = false; });
+          current.visible = current.userData.flat;
+          continue;
+        }
+
+        const neighbours = new Set();
+        for (const transition of transitions) {
+          if (transition.sameLevel)
+            neighbours.add(String(transition.locationID));
+        }
+        for (const surface of surfaces) {
+          surface.visible = surface.userData.flat &&
+            !neighbours.has(String(surface.userData.locationId));
+        }
+      }
+    }
+
     setLocationEngineries(locationId) {
       const location = this.locations.get(String(locationId));
       const presented = new Set();
@@ -559,11 +555,13 @@
           object.traverse((child) => {
             if (!child.material)
               return;
+            child.layers.set(CONTROL_LAYER);
+            child.renderOrder = CONTROL_ORDER;
             child.material.userData.notPresented = !isPresented;
             if (!isPresented) {
               child.material.color.set(0x808080);
-              child.material.opacity = 1;
-              child.material.transparent = false;
+              child.material.opacity = 0.5;
+              child.material.transparent = true;
               child.material.depthWrite = false;
               return;
             }
@@ -607,8 +605,8 @@
           if (!child.material)
             return;
           if (child.material.userData.notPresented) {
-            child.material.opacity = 1;
-            child.material.transparent = false;
+            child.material.opacity = 0.5 * modelOpacity;
+            child.material.transparent = true;
             child.material.depthWrite = false;
             return;
           }
@@ -653,8 +651,8 @@
             return;
           }
           if (child.material.userData.notPresented) {
-            child.material.opacity = 1;
-            child.material.transparent = false;
+            child.material.opacity = 0.5 * info.opacity;
+            child.material.transparent = true;
             child.material.depthWrite = false;
             return;
           }
@@ -680,6 +678,7 @@
       const arrangement = this.arrangementFor(locationId);
       if (!arrangement)
         return false;
+      this.setLocationNavigations(locationId);
       this.setLocationEngineries(locationId);
       const target = this.stateFor(arrangement);
       if (animate === false) {
@@ -713,15 +712,35 @@
       };
     }
 
-    renderModelsInOrder() {
+    setCameraLayers(layers, includeDefault) {
+      this.camera.layers.set(layers[0]);
+      for (let index = 1; index < layers.length; index++)
+        this.camera.layers.enable(layers[index]);
+      if (includeDefault)
+        this.camera.layers.enable(0);
+    }
+
+    renderLayer(layer) {
+      this.setCameraLayers([layer], true);
+      this.renderer.render(this.scene, this.camera);
+    }
+
+    renderScene() {
+      const renderer = this.renderer;
       const models = Array.from(this.models.values());
       const visibility = models.map((model) => model.visible);
-      const passes = [
-        OPAQUE_CONSTRUCTION_LAYER,
-        CONTROL_LAYER,
-        TRANSPARENT_DEPTH_LAYER,
-        TRANSPARENT_COLOR_LAYER
-      ];
+      const previousTarget = renderer.getRenderTarget();
+      const previousAutoClear = renderer.autoClear;
+      const previousClearColor = renderer.getClearColor(new THREE.Color());
+      const previousClearAlpha = renderer.getClearAlpha();
+      const previousBackground = this.scene.background;
+      const previousLayers = this.camera.layers.mask;
+
+      renderer.autoClear = false;
+      this.scene.background = null;
+      renderer.setRenderTarget(null);
+      renderer.setClearColor(previousBackground || previousClearColor, 1);
+      renderer.clear(true, true, true);
 
       models.forEach((model) => { model.visible = false; });
       for (let index = 0; index < models.length; index++) {
@@ -729,52 +748,20 @@
           continue;
         const model = models[index];
         model.visible = true;
-        for (const layer of passes) {
-          this.camera.layers.set(layer);
-          this.camera.layers.enable(0);
-          this.renderer.render(this.scene, this.camera);
-        }
+
+        this.renderLayer(OPAQUE_CONSTRUCTION_LAYER);
+
+        this.renderLayer(NAVIGATION_LAYER);
+        this.renderLayer(CONTROL_LAYER);
+
+        this.renderLayer(TRANSPARENT_DEPTH_LAYER);
+        this.renderLayer(TRANSPARENT_COLOR_LAYER);
+
         model.visible = false;
       }
       models.forEach((model, index) => { model.visible = visibility[index]; });
-    }
-
-    renderSceneWithShadow() {
-      const renderer = this.renderer;
-      const previousTarget = renderer.getRenderTarget();
-      const previousAutoClear = renderer.autoClear;
-      const previousClearColor = renderer.getClearColor(new THREE.Color());
-      const previousClearAlpha = renderer.getClearAlpha();
-      const previousBackground = this.scene.background;
-      const previousOverride = this.scene.overrideMaterial;
-      const previousLayers = this.camera.layers.mask;
-
-      renderer.autoClear = false;
-
-      this.scene.background = null;
-      this.scene.overrideMaterial = this.shadowMaskMaterial;
-      this.camera.layers.set(SHADOW_LAYER);
-      renderer.setRenderTarget(this.shadowMaskTarget);
-      renderer.setClearColor(0x000000, 1);
-      renderer.clear(true, true, true);
-      renderer.render(this.scene, this.camera);
-
-      this.scene.overrideMaterial = previousOverride;
-      this.camera.layers.mask = previousLayers;
-      renderer.setRenderTarget(this.shadowBlurTarget);
-      renderer.setClearColor(0x000000, 1);
-      renderer.clear(true, false, false);
-      renderer.render(this.blurScene, this.postCamera);
-
-      renderer.setRenderTarget(null);
-      renderer.setClearColor(previousBackground || previousClearColor, 1);
-      renderer.clear(true, true, true);
-      renderer.render(this.shadowScene, this.postCamera);
-      renderer.clearDepth();
-      this.renderModelsInOrder();
 
       this.scene.background = previousBackground;
-      this.scene.overrideMaterial = previousOverride;
       this.camera.layers.mask = previousLayers;
       renderer.setRenderTarget(previousTarget);
       renderer.setClearColor(previousClearColor, previousClearAlpha);
@@ -791,7 +778,7 @@
         if (raw >= 1)
           this.transition = null;
       }
-      this.renderSceneWithShadow();
+      this.renderScene();
       this.animationFrame = requestAnimationFrame(this.renderFrame);
     }
 
@@ -799,12 +786,7 @@
       this.disposed = true;
       cancelAnimationFrame(this.animationFrame);
       this.resizeObserver.disconnect();
-      this.shadowMaskTarget.dispose();
-      this.shadowBlurTarget.dispose();
-      this.shadowMaskMaterial.dispose();
-      this.blurMaterial.dispose();
-      this.shadowCompositeMaterial.dispose();
-      this.postGeometry.dispose();
+      this.renderer.domElement.removeEventListener("click", this.handleNavigationClick);
       this.scene.traverse((object) => {
         if (object.geometry)
           object.geometry.dispose();

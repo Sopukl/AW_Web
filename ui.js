@@ -161,6 +161,7 @@
         try {
           const container = document.getElementById("three-view-container");
           this._threeView = new ProjectThreeView(container, this._model, this.colorScheme);
+          this._threeView.onNavigate = (locationId) => this.selectLocation(locationId);
           const rootId = this._model.rootLocationID;
           const first = this.locations.find((location) =>
             location.id === rootId && location.arrangements && location.arrangements.length
