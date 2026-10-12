@@ -203,6 +203,7 @@
       material.userData.baseOpacity = parsedColor.opacity;
       material.userData.enginery = !!options.enginery;
       material.userData.engineryType = options.engineryType || "";
+      material.userData.controlContour = false;
       const mesh = new THREE.Mesh(fillGeometry, material);
       if (options.enginery) {
         material.depthWrite = false;
@@ -262,6 +263,7 @@
       material.userData.enginery = !!options.enginery;
       material.userData.engineryType = options.engineryType || "";
       material.userData.fixedOpacity = !!options.enginery;
+      material.userData.controlContour = !!options.enginery;
       const lines = new THREE.LineSegments(geometry, material);
       if (options.enginery) {
         material.depthWrite = false;
@@ -378,7 +380,11 @@
       this.raycaster.layers.set(NAVIGATION_LAYER);
       this.pointer = new THREE.Vector2();
       this.handleNavigationClick = this.handleNavigationClick.bind(this);
+      this.handleControlHover = this.handleControlHover.bind(this);
+      this.clearControlHover = this.clearControlHover.bind(this);
       this.renderer.domElement.addEventListener("click", this.handleNavigationClick);
+      this.renderer.domElement.addEventListener("pointermove", this.handleControlHover);
+      this.renderer.domElement.addEventListener("pointerleave", this.clearControlHover);
 
       this.scene.add(new THREE.HemisphereLight(0xffffff, 0x66717a, 1.25));
       const light = new THREE.DirectionalLight(0xffffff, 1.75);
@@ -419,6 +425,7 @@
         ((event.clientX - rect.left) / rect.width) * 2 - 1,
         -((event.clientY - rect.top) / rect.height) * 2 + 1
       );
+      this.raycaster.layers.set(NAVIGATION_LAYER);
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const intersections = this.raycaster.intersectObjects(this.navigationObjects, true);
       const hit = intersections.find((item) => {
@@ -433,6 +440,65 @@
       });
       if (hit && typeof this.onNavigate === "function")
         this.onNavigate(hit.object.userData.navigationLocationId);
+    }
+
+    setHoveredControl(object) {
+      if (this.hoveredControl === object)
+        return;
+      const updateContour = (control, hovered) => {
+        if (!control)
+          return;
+        control.traverse((child) => {
+          const material = child.material;
+          if (!material || !material.userData.controlContour)
+            return;
+          if (hovered) {
+            material.color.set(0x0000ff);
+          } else if (material.userData.notPresented) {
+            material.color.set(0x808080);
+          } else {
+            const scheme = COLOR_SCHEMES[this.colorSchemeName];
+            const color = scheme.lighting[material.userData.engineryType];
+            if (color)
+              material.color.set(color);
+          }
+        });
+      };
+      updateContour(this.hoveredControl, false);
+      this.hoveredControl = object || null;
+      updateContour(this.hoveredControl, true);
+      this.renderer.domElement.style.cursor = this.hoveredControl ? "pointer" : "";
+    }
+
+    handleControlHover(event) {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.set(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      this.raycaster.layers.set(CONTROL_LAYER);
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const controls = [];
+      for (const objects of this.engineryObjects.values())
+        controls.push(...objects);
+      const intersections = this.raycaster.intersectObjects(controls, true);
+      const hit = intersections.find((item) => {
+        let object = item.object;
+        while (object) {
+          if (!object.visible)
+            return false;
+          object = object.parent;
+        }
+        return true;
+      });
+      let control = hit ? hit.object : null;
+      while (control && control.userData.engineryId === undefined)
+        control = control.parent;
+      this.setHoveredControl(control);
+    }
+
+    clearControlHover() {
+      this.setHoveredControl(null);
     }
 
     setColorScheme(name) {
@@ -459,6 +525,11 @@
         if (color)
           material.color.set(color);
       });
+      if (this.hoveredControl) {
+        const hovered = this.hoveredControl;
+        this.hoveredControl = null;
+        this.setHoveredControl(hovered);
+      }
       return true;
     }
 
@@ -540,6 +611,7 @@
     }
 
     setLocationEngineries(locationId) {
+      this.clearControlHover();
       const location = this.locations.get(String(locationId));
       const presented = new Set();
       for (const model of (location && location.models) || []) {
@@ -787,6 +859,8 @@
       cancelAnimationFrame(this.animationFrame);
       this.resizeObserver.disconnect();
       this.renderer.domElement.removeEventListener("click", this.handleNavigationClick);
+      this.renderer.domElement.removeEventListener("pointermove", this.handleControlHover);
+      this.renderer.domElement.removeEventListener("pointerleave", this.clearControlHover);
       this.scene.traverse((object) => {
         if (object.geometry)
           object.geometry.dispose();
