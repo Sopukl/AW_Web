@@ -79,20 +79,52 @@
           roots.unshift(roots.splice(rootIndex, 1)[0]);
         return roots;
       },
-      visibleLocationNodes() {
-        const result = [];
-        const visited = new Set();
-        const append = (node, depth) => {
-          const key = String(node.location.id);
-          if (visited.has(key))
-            return;
-          visited.add(key);
-          result.push({ location: node.location, children: node.children, depth: depth });
-          if (this.isLocationExpanded(node.location.id))
-            node.children.forEach((child) => append(child, depth + 1));
+      navigationPath() {
+        const roots = this.locationTree;
+        let selected = null;
+        const find = (nodes) => {
+          for (const node of nodes) {
+            if (node.location.id === this.currentLocationId) {
+              selected = node;
+              return true;
+            }
+            if (find(node.children))
+              return true;
+          }
+          return false;
         };
-        this.locationTree.forEach((root) => append(root, 0));
-        return result;
+        find(roots);
+        if (!selected)
+          return [];
+
+        const path = [];
+        for (let node = selected; node; node = node.parent)
+          path.unshift(node);
+
+        const flatten = (nodes) => {
+          const result = [];
+          const visited = new Set();
+          const append = (node, depth) => {
+            const key = String(node.location.id);
+            if (visited.has(key))
+              return;
+            visited.add(key);
+            result.push({
+              location: node.location,
+              children: node.children,
+              depth: depth
+            });
+            if (this.isLocationExpanded(node.location.id))
+              node.children.forEach((child) => append(child, depth + 1));
+          };
+          nodes.forEach((node) => append(node, 0));
+          return result;
+        };
+
+        return path.map((node) => ({
+          node: node,
+          items: flatten(node.parent ? node.parent.children : roots)
+        }));
       }
     },
     methods: {
@@ -139,9 +171,7 @@
         this.unpacked = project.files;
         this._model = project;
         this.locations = project.locations.slice();
-        this.expandedLocations = Object.fromEntries(
-          this.locations.map((location) => [String(location.id), true])
-        );
+        this.expandedLocations = {};
         this.currentLocationId = null;
         this.view3dError = "";
         this._engineryStates = new Map();
@@ -178,6 +208,24 @@
         if (this._threeView && this._threeView.goToLocation(locationId, true))
           this.currentLocationId = locationId;
       },
+      selectNavigationLocation(locationId, event) {
+        this.selectLocation(locationId);
+        const details = event && event.currentTarget.closest("details");
+        if (details)
+          details.open = false;
+      },
+      handleNavigationTreeToggle(event) {
+        const opened = event.currentTarget;
+        if (!opened.open)
+          return;
+        const navigation = opened.closest(".location-breadcrumb");
+        if (!navigation)
+          return;
+        navigation.querySelectorAll(".location-step[open]").forEach((details) => {
+          if (details !== opened)
+            details.open = false;
+        });
+      },
       changeColorScheme() {
         if (this._threeView)
           this._threeView.setColorScheme(this.colorScheme);
@@ -188,7 +236,7 @@
           ("Локация " + location.id);
       },
       isLocationExpanded(locationId) {
-        return this.expandedLocations[String(locationId)] !== false;
+        return this.expandedLocations[String(locationId)] === true;
       },
       toggleLocation(locationId) {
         const key = String(locationId);

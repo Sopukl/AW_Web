@@ -10,47 +10,54 @@
   <div id="app">
     <main v-if="connected" class="workspace">
       <section class="panel three-view">
-        <aside class="location-panel">
-          <h2>Локации</h2>
+        <div class="three-stage">
+          <nav class="location-breadcrumb" aria-label="Путь по локациям">
+            <template v-for="(step, stepIndex) in navigationPath" :key="step.node.location.id">
+              <span v-if="stepIndex" class="breadcrumb-separator" aria-hidden="true">›</span>
+              <details class="location-step" @toggle="handleNavigationTreeToggle">
+                <summary :class="{ active: stepIndex === navigationPath.length - 1 }">
+                  {{ locationTitle(step.node.location) }}
+                </summary>
+                <div class="location-tree-popup" role="tree">
+                  <div
+                    v-for="item in step.items"
+                    :key="item.location.id"
+                    class="location-tree-row"
+                    :style="{ '--tree-depth': item.depth }"
+                    role="treeitem"
+                    :aria-level="item.depth + 1"
+                    :aria-expanded="item.children.length ? isLocationExpanded(item.location.id) : undefined"
+                  >
+                    <button
+                      v-if="item.children.length"
+                      type="button"
+                      class="tree-toggle"
+                      :aria-label="isLocationExpanded(item.location.id) ? 'Свернуть' : 'Развернуть'"
+                      @click.stop="toggleLocation(item.location.id)"
+                    >{{ isLocationExpanded(item.location.id) ? '▾' : '▸' }}</button>
+                    <span v-else class="tree-spacer"></span>
+                    <button
+                      type="button"
+                      class="location-button"
+                      :class="{ active: currentLocationId === item.location.id }"
+                      :disabled="!item.location.arrangements || !item.location.arrangements.length"
+                      @click="selectNavigationLocation(item.location.id, $event)"
+                    >
+                      <span>{{ locationTitle(item.location) }}</span>
+                    </button>
+                  </div>
+                </div>
+              </details>
+            </template>
+          </nav>
+
           <label class="color-scheme-select">Цветовая схема
             <select v-model="colorScheme" @change="changeColorScheme">
               <option value="Awada">Awada</option>
               <option value="Default">Default</option>
             </select>
           </label>
-          <p class="hint">Выберите локацию для перехода.</p>
-          <div class="location-tree" role="tree">
-            <div
-              v-for="node in visibleLocationNodes"
-              :key="node.location.id"
-              class="location-tree-row"
-              :style="{ '--tree-depth': node.depth }"
-              role="treeitem"
-              :aria-level="node.depth + 1"
-              :aria-expanded="node.children.length ? isLocationExpanded(node.location.id) : undefined"
-            >
-              <button
-                v-if="node.children.length"
-                type="button"
-                class="tree-toggle"
-                :aria-label="isLocationExpanded(node.location.id) ? 'Свернуть' : 'Развернуть'"
-                @click="toggleLocation(node.location.id)"
-              >{{ isLocationExpanded(node.location.id) ? '▾' : '▸' }}</button>
-              <span v-else class="tree-spacer"></span>
-              <button
-                type="button"
-                class="location-button"
-                :class="{ active: currentLocationId === node.location.id }"
-                :disabled="!node.location.arrangements || !node.location.arrangements.length"
-                @click="selectLocation(node.location.id)"
-              >
-                <span>{{ locationTitle(node.location) }}</span>
-                <small>ID {{ node.location.id }}</small>
-              </button>
-            </div>
-          </div>
-        </aside>
-        <div class="three-stage">
+
           <div id="three-view-container"></div>
           <div v-if="view3dError" class="three-message error">{{ view3dError }}</div>
           <div v-else-if="!locations.length" class="three-message">В проекте нет локаций.</div>
