@@ -122,6 +122,11 @@
   const CONTROL_ORDER = 300;
   const TRANSPARENT_DEPTH_ORDER = 400;
   const TRANSPARENT_COLOR_ORDER = 500;
+  const MNEMO_LIGHTING = {
+    ambient: [77 / 255, 77 / 255, 77 / 255, 77 / 255],
+    diffuse: [1, 1, 1, 1],
+    direction: new THREE.Vector3(-0.5, -0.7, 1).normalize()
+  };
   function isRenderSurface(surface) {
     return surface.Signature === "S" || surface.Signature === 83;
   }
@@ -144,6 +149,52 @@
       }
     }
     return true;
+  }
+
+  function createMnemoLitMaterial(color, opacity) {
+    const uniforms = {
+      ambientColor: { value: new THREE.Vector4(...MNEMO_LIGHTING.ambient) },
+      diffuseColor: { value: new THREE.Vector4(...MNEMO_LIGHTING.diffuse) },
+      lightDirection: { value: MNEMO_LIGHTING.direction.clone() },
+      surfaceColor: { value: color.clone() },
+      surfaceOpacity: { value: opacity }
+    };
+    const material = new THREE.ShaderMaterial({
+      uniforms: uniforms,
+      vertexShader: [
+        "uniform vec4 ambientColor;",
+        "uniform vec4 diffuseColor;",
+        "uniform vec3 lightDirection;",
+        "uniform vec3 surfaceColor;",
+        "uniform float surfaceOpacity;",
+        "varying vec4 vertexColor;",
+        "void main() {",
+        "  vec4 n4 = normalize(modelMatrix * vec4(normal, 0.0));",
+        "  vec3 transformedNormal = n4.xyz;",
+        "  float NdotL = max(abs(dot(transformedNormal, lightDirection)), 0.2);",
+        "  vertexColor = vec4(NdotL * diffuseColor.xyz * surfaceColor.xyz, surfaceOpacity);",
+        "  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);",
+        "}"
+      ].join("\n"),
+      fragmentShader: [
+        "varying vec4 vertexColor;",
+        "void main() {",
+        "  gl_FragColor = vertexColor;",
+        "  #include <colorspace_fragment>",
+        "}"
+      ].join("\n"),
+      side: THREE.DoubleSide,
+      transparent: opacity < 1,
+      depthWrite: opacity >= 1,
+      toneMapped: false
+    });
+    material.color = color.clone();
+    material.opacity = opacity;
+    material.onBeforeRender = function () {
+      uniforms.surfaceColor.value.copy(material.color);
+      uniforms.surfaceOpacity.value = material.opacity;
+    };
+    return material;
   }
 
   function buildSurface(surface, options) {
@@ -189,17 +240,18 @@
       fillGeometry.setIndex(fillIndices);
       fillGeometry.computeBoundingSphere();
 
-      const Material = options.unlit ? THREE.MeshBasicMaterial : THREE.MeshLambertMaterial;
-      const material = new Material({
-        color: parsedColor.color,
-        opacity: parsedColor.opacity,
-        transparent: parsedColor.opacity < 1,
-        side: THREE.DoubleSide,
-        depthWrite: parsedColor.opacity >= 1,
-        polygonOffset: !!options.enginery,
-        polygonOffsetFactor: 1,
-        polygonOffsetUnits: 1
-      });
+      const material = options.unlit
+        ? new THREE.MeshBasicMaterial({
+          color: parsedColor.color,
+          opacity: parsedColor.opacity,
+          transparent: parsedColor.opacity < 1,
+          side: THREE.DoubleSide,
+          depthWrite: parsedColor.opacity >= 1
+        })
+        : createMnemoLitMaterial(parsedColor.color, parsedColor.opacity);
+      material.polygonOffset = !!options.enginery;
+      material.polygonOffsetFactor = 1;
+      material.polygonOffsetUnits = 1;
       material.userData.baseOpacity = parsedColor.opacity;
       material.userData.enginery = !!options.enginery;
       material.userData.engineryType = options.engineryType || "";
@@ -247,18 +299,22 @@
       if (contourIndices.length) {
         geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", attributes.position.clone());
+        geometry.setAttribute("normal", attributes.normal.clone());
         geometry.setIndex(contourIndices);
       } else {
         geometry = new THREE.EdgesGeometry(fillGeometry);
       }
       const contourOpacity = options.enginery ? 1 : parsedColor.opacity;
-      const material = new THREE.LineBasicMaterial({
-        color: options.enginery
-          ? parsedColor.color
-          : parsedColor.color.clone().multiplyScalar(0.55),
-        transparent: contourOpacity < 1,
-        opacity: contourOpacity
-      });
+      const contourColor = options.enginery
+        ? parsedColor.color
+        : parsedColor.color.clone().multiplyScalar(0.55);
+      const material = options.enginery
+        ? new THREE.LineBasicMaterial({
+          color: contourColor,
+          transparent: contourOpacity < 1,
+          opacity: contourOpacity
+        })
+        : createMnemoLitMaterial(contourColor, contourOpacity);
       material.userData.baseOpacity = contourOpacity;
       material.userData.enginery = !!options.enginery;
       material.userData.engineryType = options.engineryType || "";
@@ -385,11 +441,6 @@
       this.renderer.domElement.addEventListener("click", this.handleNavigationClick);
       this.renderer.domElement.addEventListener("pointermove", this.handleControlHover);
       this.renderer.domElement.addEventListener("pointerleave", this.clearControlHover);
-
-      this.scene.add(new THREE.HemisphereLight(0xffffff, 0x66717a, 1.25));
-      const light = new THREE.DirectionalLight(0xffffff, 1.75);
-      light.position.set(-0.5, -0.7, 1);
-      this.scene.add(light);
 
       for (const model of project.models || []) {
         const object = buildModel(
