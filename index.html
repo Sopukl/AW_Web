@@ -51,19 +51,47 @@
             </template>
           </nav>
 
-          <label class="color-scheme-select">Цветовая схема
-            <select v-model="colorScheme" @change="changeColorScheme">
-              <option value="Awada">Awada</option>
-              <option value="Default">Default</option>
-            </select>
-          </label>
-
           <div id="three-view-container"></div>
           <div v-if="view3dError" class="three-message error">{{ view3dError }}</div>
           <div v-else-if="!locations.length" class="three-message">В проекте нет локаций.</div>
+          <button type="button" class="awada-settings-button" @click="settingsDialogOpen = true">
+            AWADA
+          </button>
         </div>
       </section>
     </main>
+
+    <div v-if="settingsDialogOpen" class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <section class="settings-content">
+        <header class="settings-header">
+          <h2 id="settings-title">Настройки</h2>
+          <button type="button" class="settings-close" aria-label="Закрыть настройки" @click="settingsDialogOpen = false">×</button>
+        </header>
+        <div class="settings-layout">
+          <main class="settings-page" :class="{ 'settings-page-list': selectedSettingsSection === 'Цветовая схема' }">
+            <h3 v-if="selectedSettingsSection !== 'Цветовая схема'">{{ selectedSettingsSection }}</h3>
+            <div v-else class="settings-options" aria-label="Цветовая схема">
+              <button
+                v-for="scheme in ['Awada', 'Default']"
+                :key="scheme"
+                type="button"
+                :class="{ active: colorScheme === scheme }"
+                @click="colorScheme = scheme; changeColorScheme()"
+              >{{ scheme }}</button>
+            </div>
+          </main>
+          <nav class="settings-sections" aria-label="Разделы настроек">
+            <button
+              v-for="section in settingsSections"
+              :key="section"
+              type="button"
+              :class="{ active: selectedSettingsSection === section }"
+              @click="selectedSettingsSection = section"
+            >{{ section }}</button>
+          </nav>
+        </div>
+      </section>
+    </div>
 
     <div v-if="connectionDialogOpen" class="dialog-backdrop">
       <form class="panel connection-dialog" role="dialog" aria-modal="true" aria-labelledby="connection-title" @submit.prevent="connect">

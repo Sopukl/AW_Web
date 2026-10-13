@@ -10,6 +10,17 @@
         busy: false,
         connected: false,
         connectionDialogOpen: true,
+        settingsDialogOpen: false,
+        selectedSettingsSection: "Язык",
+        settingsSections: [
+          "Язык",
+          "Загрузка проектов",
+          "Цветовая схема",
+          "Интерфейс",
+          "Сеть",
+          "Настройки проекта",
+          "О приложении"
+        ],
         locations: [],
         expandedLocations: {},
         currentLocationId: null,
