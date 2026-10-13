@@ -57,7 +57,7 @@ h3 { font-size: 16px; margin-bottom: 8px; }
 .status[data-state="idle"] { color: var(--idle); }
 
 .workspace {
-  padding: 16px 24px 32px;
+  padding: 16px;
 }
 
 .tabs {
@@ -204,7 +204,7 @@ table { width: max-content; min-width: 100%; }
 .log { margin-top: 16px; }
 
 .three-view {
-  min-height: calc(100vh - 170px);
+  min-height: calc(100vh - 32px);
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   gap: 16px;
@@ -283,7 +283,7 @@ table { width: max-content; min-width: 100%; }
 
 .three-stage {
   position: relative;
-  min-height: calc(100vh - 204px);
+  min-height: calc(100vh - 66px);
   overflow: hidden;
   border-radius: 10px;
   background: #e9edf0;
