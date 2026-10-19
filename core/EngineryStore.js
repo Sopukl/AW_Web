@@ -11,7 +11,8 @@ export class EngineryStore {
     this.items.clear();
     for (const item of project.engineries || []) {
       const enginery = EngineryFactory.create(item, project);
-      this.items.set(String(enginery.id), enginery);
+      if (enginery)
+        this.items.set(String(enginery.id), enginery);
     }
     this.changed();
     return this;
