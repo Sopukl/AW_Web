@@ -1,0 +1,507 @@
+const THREE = globalThis.THREE;
+import {
+  buildModel,
+  vector,
+  COLOR_SCHEMES,
+  OPAQUE_CONSTRUCTION_LAYER,
+  NAVIGATION_LAYER,
+  CONTROL_LAYER,
+  CONTROL_ORDER,
+  TRANSPARENT_DEPTH_LAYER,
+  TRANSPARENT_COLOR_LAYER
+} from "./buildModel.js";
+
+export class ProjectThreeView {
+    constructor(container, project, engineryStore, colorSchemeName) {
+      if (!globalThis.THREE)
+        throw new Error("Не удалось загрузить Three.js");
+      if (!container)
+        throw new Error("Не найден контейнер 3D-view");
+
+      this.container = container;
+      this.project = project;
+      this.engineryStore = engineryStore;
+      this.onControlClick = null;
+      this.onControlHover = null;
+      this.onNavigate = null;
+      this.locations = new Map((project.locations || []).map((item) => [String(item.id), item]));
+      this.models = new Map();
+      this.engineryObjects = new Map();
+      this.navigationObjects = [];
+      this.engineryById = new Map(engineryStore.all().map((item) => [String(item.id), item]));
+      this.colorSchemeName = COLOR_SCHEMES[colorSchemeName] ? colorSchemeName : "Awada";
+      this.currentCenter = new THREE.Vector3();
+      this.disposed = false;
+
+      this.scene = new THREE.Scene();
+      this.scene.background = new THREE.Color(COLOR_SCHEMES[this.colorSchemeName].background);
+
+      this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000000);
+      this.camera.up.set(0, 0, 1);
+
+      this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      this.renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2));
+      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      container.replaceChildren(this.renderer.domElement);
+      this.raycaster = new THREE.Raycaster();
+      this.raycaster.layers.set(NAVIGATION_LAYER);
+      this.pointer = new THREE.Vector2();
+      this.handleNavigationClick = this.handleNavigationClick.bind(this);
+      this.handleControlClick = this.handleControlClick.bind(this);
+      this.handleControlHover = this.handleControlHover.bind(this);
+      this.clearControlHover = this.clearControlHover.bind(this);
+      this.renderer.domElement.addEventListener("click", this.handleNavigationClick);
+      this.renderer.domElement.addEventListener("click", this.handleControlClick);
+      this.renderer.domElement.addEventListener("pointermove", this.handleControlHover);
+      this.renderer.domElement.addEventListener("pointerleave", this.clearControlHover);
+
+      for (const model of project.models || []) {
+        const object = buildModel(
+          model,
+          this.engineryById,
+          this.engineryObjects,
+          this.navigationObjects,
+          COLOR_SCHEMES[this.colorSchemeName]
+        );
+        object.visible = false;
+        this.models.set(String(model.id), object);
+        this.scene.add(object);
+      }
+
+      this.resizeObserver = new ResizeObserver(() => this.resize());
+      this.resizeObserver.observe(container);
+      this.resize();
+      this.renderFrame = this.renderFrame.bind(this);
+      this.animationFrame = requestAnimationFrame(this.renderFrame);
+      this.unsubscribeStore = engineryStore.subscribe(() => this.applyEngineryStates());
+    }
+
+    resize() {
+      const width = Math.max(this.container.clientWidth, 1);
+      const height = Math.max(this.container.clientHeight, 1);
+      this.renderer.setSize(width, height, false);
+      this.camera.aspect = width / height;
+      this.camera.updateProjectionMatrix();
+    }
+
+    handleNavigationClick(event) {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.set(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      this.raycaster.layers.set(NAVIGATION_LAYER);
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const intersections = this.raycaster.intersectObjects(this.navigationObjects, true);
+      const hit = intersections.find((item) => {
+        let object = item.object;
+        while (object) {
+          if (!object.visible)
+            return false;
+          object = object.parent;
+        }
+        return item.object.userData.navigationLocationId !== undefined &&
+          item.object.userData.navigationEnabled;
+      });
+      if (hit && typeof this.onNavigate === "function")
+        this.onNavigate(hit.object.userData.navigationLocationId);
+    }
+
+    handleControlClick(event) {
+      if (this.hoveredControl && typeof this.onControlClick === "function")
+        this.onControlClick(this.hoveredControl.userData.engineryId, event.clientX, event.clientY);
+    }
+
+    setHoveredControl(object) {
+      if (this.hoveredControl === object)
+        return;
+      const updateContour = (control, hovered) => {
+        if (!control)
+          return;
+        control.traverse((child) => {
+          const material = child.material;
+          if (!material || !material.userData.controlContour)
+            return;
+          if (hovered) {
+            material.color.set(COLOR_SCHEMES[this.colorSchemeName].hover);
+          } else if (material.userData.notPresented) {
+            material.color.set(COLOR_SCHEMES[this.colorSchemeName].generic);
+          } else {
+            const scheme = COLOR_SCHEMES[this.colorSchemeName];
+            const color = scheme.lighting[material.userData.engineryType] || scheme.generic;
+            material.color.set(color);
+          }
+        });
+      };
+      updateContour(this.hoveredControl, false);
+      this.hoveredControl = object || null;
+      updateContour(this.hoveredControl, true);
+      this.renderer.domElement.style.cursor = this.hoveredControl ? "pointer" : "";
+      if (typeof this.onControlHover === "function")
+        this.onControlHover(this.hoveredControl ? this.hoveredControl.userData.engineryId : null);
+    }
+
+    handleControlHover(event) {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.set(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      this.raycaster.layers.set(CONTROL_LAYER);
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const controls = [];
+      for (const objects of this.engineryObjects.values())
+        controls.push(...objects);
+      const intersections = this.raycaster.intersectObjects(controls, true);
+      const hit = intersections.find((item) => {
+        let object = item.object;
+        while (object) {
+          if (!object.visible)
+            return false;
+          object = object.parent;
+        }
+        return true;
+      });
+      let control = hit ? hit.object : null;
+      while (control && control.userData.engineryId === undefined)
+        control = control.parent;
+      this.setHoveredControl(control);
+    }
+
+    clearControlHover() {
+      this.setHoveredControl(null);
+    }
+
+    setColorScheme(name) {
+      const scheme = COLOR_SCHEMES[name];
+      if (!scheme)
+        return false;
+      this.colorSchemeName = name;
+      this.scene.background.set(scheme.background);
+      this.scene.traverse((object) => {
+        const material = object.material;
+        if (!material)
+          return;
+        if (material.userData.navigation) {
+          material.color.set(scheme.navigation);
+          return;
+        }
+        if (!material.userData.enginery)
+          return;
+      });
+      for (const [id, objects] of this.engineryObjects) {
+        const enginery = this.engineryStore.get(id);
+        if (enginery)
+          enginery.applyScheme(objects, scheme);
+      }
+      if (this.hoveredControl) {
+        const hovered = this.hoveredControl;
+        this.hoveredControl = null;
+        this.setHoveredControl(hovered);
+      }
+      return true;
+    }
+
+    arrangementFor(locationId) {
+      const location = this.locations.get(String(locationId));
+      return location && location.arrangements && location.arrangements[0];
+    }
+
+    stateFor(arrangement) {
+      const modelState = new Map();
+      for (const item of (arrangement && arrangement.models) || []) {
+        modelState.set(String(item.id), {
+          position: vector(item.position, new THREE.Vector3()),
+          opacity: item.visibility ? 1 : 0
+        });
+      }
+      return {
+        position: vector(arrangement && arrangement.position, new THREE.Vector3(10, -10, 10)),
+        center: vector(arrangement && arrangement.center, new THREE.Vector3()),
+        models: modelState
+      };
+    }
+
+    captureState() {
+      const modelState = new Map();
+      for (const [id, object] of this.models) {
+        modelState.set(id, {
+          position: object.position.clone(),
+          opacity: object.userData.opacity || 0
+        });
+      }
+      return {
+        position: this.camera.position.clone(),
+        center: this.currentCenter.clone(),
+        models: modelState
+      };
+    }
+
+    setLocationNavigations(locationId) {
+      const location = this.locations.get(String(locationId));
+      const locationModels = new Map(
+        ((location && location.models) || []).map((model) => [String(model.id), model])
+      );
+
+      for (const [modelId, model] of this.models) {
+        const surfaces = model.userData.navigationSurfaces || [];
+        const locationModel = locationModels.get(modelId);
+        const transitions = (locationModel && locationModel.transitions) || [];
+        const transitionTargets = new Set(
+          transitions.map((transition) => String(transition.locationID))
+        );
+        for (const surface of surfaces) {
+          const enabled = transitionTargets.has(String(surface.userData.locationId));
+          surface.userData.navigationEnabled = enabled;
+          surface.traverse((child) => {
+            if (child.userData.navigationLocationId !== undefined)
+              child.userData.navigationEnabled = enabled;
+          });
+        }
+        const current = surfaces.find((surface) =>
+          String(surface.userData.locationId) === String(locationId)
+        );
+        if (current) {
+          surfaces.forEach((surface) => { surface.visible = false; });
+          current.visible = current.userData.flat;
+          continue;
+        }
+
+        const neighbours = new Set();
+        for (const transition of transitions) {
+          if (transition.sameLevel)
+            neighbours.add(String(transition.locationID));
+        }
+        for (const surface of surfaces) {
+          surface.visible = surface.userData.flat &&
+            !neighbours.has(String(surface.userData.locationId));
+        }
+      }
+    }
+
+    setLocationEngineries(locationId) {
+      this.clearControlHover();
+      const location = this.locations.get(String(locationId));
+      const presented = new Set();
+      for (const model of (location && location.models) || []) {
+        for (const control of model.controls || [])
+          presented.add(String(control.engineryID));
+      }
+
+      for (const [id, objects] of this.engineryObjects) {
+        const isPresented = presented.has(id);
+        const enginery = this.engineryStore.get(id);
+        if (enginery)
+          enginery.presented = isPresented;
+        for (const object of objects) {
+          object.userData.presented = isPresented;
+          object.visible = true;
+          object.traverse((child) => {
+            if (!child.material)
+              return;
+            child.layers.set(CONTROL_LAYER);
+            child.renderOrder = CONTROL_ORDER;
+            child.material.userData.notPresented = !isPresented;
+          });
+        }
+      }
+      this.applyEngineryStates();
+    }
+
+    updateEngineryState(engineryId, field, value) {
+      this.engineryStore.updateState(engineryId, field, value);
+    }
+
+    applyEngineryStates() {
+      const scheme = COLOR_SCHEMES[this.colorSchemeName];
+      for (const [key, objects] of this.engineryObjects) {
+        const enginery = this.engineryStore.get(key);
+        if (!enginery)
+          continue;
+        for (const object of objects) {
+        const model = this.models.get(String(object.userData.modelId));
+        const modelOpacity = model ? (model.userData.opacity || 0) : 0;
+          enginery.applyToObjects([object], scheme, modelOpacity);
+        }
+      }
+    }
+
+    applyState(state) {
+      this.camera.position.copy(state.position);
+      this.currentCenter.copy(state.center);
+      if (this.camera.position.distanceToSquared(this.currentCenter) < 0.000001)
+        this.camera.position.add(new THREE.Vector3(10, -10, 10));
+      this.camera.lookAt(this.currentCenter);
+
+      for (const [id, object] of this.models) {
+        const info = state.models.get(id) || {
+          position: new THREE.Vector3(),
+          opacity: 0
+        };
+        object.position.copy(info.position);
+        object.userData.opacity = info.opacity;
+        object.visible = info.opacity > 0.001;
+        object.traverse((child) => {
+          if (!child.material)
+            return;
+          const renderPass = child.material.userData.renderPass;
+          if (renderPass === "transparentDepth") {
+            child.material.opacity = 1;
+            child.material.transparent = false;
+            child.material.colorWrite = false;
+            child.material.depthWrite = true;
+            return;
+          }
+          if (child.material.userData.notPresented) {
+            child.material.opacity = 0.5 * info.opacity;
+            child.material.transparent = true;
+            child.material.depthWrite = false;
+            return;
+          }
+          if (child.material.userData.fixedOpacity) {
+            child.material.opacity = 1;
+            child.material.transparent = false;
+            child.material.depthWrite = false;
+            return;
+          }
+          const baseOpacity = child.material.userData.baseOpacity === undefined
+            ? 1 : child.material.userData.baseOpacity;
+          child.material.opacity = baseOpacity * info.opacity;
+          child.material.transparent = child.material.opacity < 1;
+          if (renderPass === "opaqueConstruction")
+            child.material.depthWrite = true;
+          else
+            child.material.depthWrite = false;
+        });
+      }
+    }
+
+    goToLocation(locationId, animate) {
+      const arrangement = this.arrangementFor(locationId);
+      if (!arrangement)
+        return false;
+      this.setLocationNavigations(locationId);
+      this.setLocationEngineries(locationId);
+      const target = this.stateFor(arrangement);
+      if (animate === false) {
+        this.transition = null;
+        this.applyState(target);
+      } else {
+        this.transition = {
+          startedAt: performance.now(),
+          duration: 500,
+          from: this.captureState(),
+          to: target
+        };
+      }
+      return true;
+    }
+
+    interpolateState(from, to, amount) {
+      const modelState = new Map();
+      for (const id of this.models.keys()) {
+        const a = from.models.get(id) || { position: new THREE.Vector3(), opacity: 0 };
+        const b = to.models.get(id) || { position: new THREE.Vector3(), opacity: 0 };
+        modelState.set(id, {
+          position: a.position.clone().lerp(b.position, amount),
+          opacity: THREE.MathUtils.lerp(a.opacity, b.opacity, amount)
+        });
+      }
+      return {
+        position: from.position.clone().lerp(to.position, amount),
+        center: from.center.clone().lerp(to.center, amount),
+        models: modelState
+      };
+    }
+
+    setCameraLayers(layers, includeDefault) {
+      this.camera.layers.set(layers[0]);
+      for (let index = 1; index < layers.length; index++)
+        this.camera.layers.enable(layers[index]);
+      if (includeDefault)
+        this.camera.layers.enable(0);
+    }
+
+    renderLayer(layer) {
+      this.setCameraLayers([layer], true);
+      this.renderer.render(this.scene, this.camera);
+    }
+
+    renderScene() {
+      const renderer = this.renderer;
+      const models = Array.from(this.models.values());
+      const visibility = models.map((model) => model.visible);
+      const previousTarget = renderer.getRenderTarget();
+      const previousAutoClear = renderer.autoClear;
+      const previousClearColor = renderer.getClearColor(new THREE.Color());
+      const previousClearAlpha = renderer.getClearAlpha();
+      const previousBackground = this.scene.background;
+      const previousLayers = this.camera.layers.mask;
+
+      renderer.autoClear = false;
+      this.scene.background = null;
+      renderer.setRenderTarget(null);
+      renderer.setClearColor(previousBackground || previousClearColor, 1);
+      renderer.clear(true, true, true);
+
+      models.forEach((model) => { model.visible = false; });
+      for (let index = 0; index < models.length; index++) {
+        if (!visibility[index])
+          continue;
+        const model = models[index];
+        model.visible = true;
+
+        this.renderLayer(OPAQUE_CONSTRUCTION_LAYER);
+
+        this.renderLayer(NAVIGATION_LAYER);
+        this.renderLayer(CONTROL_LAYER);
+
+        this.renderLayer(TRANSPARENT_DEPTH_LAYER);
+        this.renderLayer(TRANSPARENT_COLOR_LAYER);
+
+        model.visible = false;
+      }
+      models.forEach((model, index) => { model.visible = visibility[index]; });
+
+      this.scene.background = previousBackground;
+      this.camera.layers.mask = previousLayers;
+      renderer.setRenderTarget(previousTarget);
+      renderer.setClearColor(previousClearColor, previousClearAlpha);
+      renderer.autoClear = previousAutoClear;
+    }
+
+    renderFrame(now) {
+      if (this.disposed)
+        return;
+      if (this.transition) {
+        const raw = Math.min((now - this.transition.startedAt) / this.transition.duration, 1);
+        const eased = raw * raw * (3 - 2 * raw);
+        this.applyState(this.interpolateState(this.transition.from, this.transition.to, eased));
+        if (raw >= 1)
+          this.transition = null;
+      }
+      this.renderScene();
+      this.animationFrame = requestAnimationFrame(this.renderFrame);
+    }
+
+    dispose() {
+      this.disposed = true;
+      cancelAnimationFrame(this.animationFrame);
+      this.resizeObserver.disconnect();
+      if (this.unsubscribeStore)
+        this.unsubscribeStore();
+      this.renderer.domElement.removeEventListener("click", this.handleNavigationClick);
+      this.renderer.domElement.removeEventListener("click", this.handleControlClick);
+      this.renderer.domElement.removeEventListener("pointermove", this.handleControlHover);
+      this.renderer.domElement.removeEventListener("pointerleave", this.clearControlHover);
+      this.scene.traverse((object) => {
+        if (object.geometry)
+          object.geometry.dispose();
+        if (object.material)
+          object.material.dispose();
+      });
+      this.renderer.dispose();
+      this.container.replaceChildren();
+    }
+  }
+
