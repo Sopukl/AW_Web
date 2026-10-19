@@ -3,7 +3,6 @@ export const COLOR_SCHEMES = {
     background: "#212121",
     navigation: "#000000",
     generic: "#808080",
-    hover: "#0000ff",
     lighting: {
       DimmingLight: "#ff9900", DynamicLight: "#ffff33", EmergencyUnit: "#04ff1c",
       RGBLight: "#ff9900", RGBWLight: "#ff9900", RgbLight: "#ff9900",
@@ -14,7 +13,6 @@ export const COLOR_SCHEMES = {
     background: "#9b9b9b",
     navigation: "#ffffff",
     generic: "#808080",
-    hover: "#0000ff",
     lighting: {
       DimmingLight: "#e42583", DynamicLight: "#ffff33", EmergencyUnit: "#04ff1c",
       RGBLight: "#e42583", RGBWLight: "#e42583", RgbLight: "#e42583",

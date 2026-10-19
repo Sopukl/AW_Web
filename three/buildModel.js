@@ -346,8 +346,8 @@ export function buildModel(model, engineryById, engineryObjects, navigationObjec
       const engineryId = surface.DeviceId === undefined
         ? surface.engineryID : surface.DeviceId;
       const enginery = engineryById.get(String(engineryId));
-      const color = colorScheme.lighting[enginery && enginery.type] || colorScheme.generic;
-      if (!enginery || !isRenderSurface(surface))
+      const color = colorScheme.lighting[enginery && enginery.type];
+      if (!enginery || !color || !isRenderSurface(surface))
         continue;
 
       const object = buildSurface(surface, {

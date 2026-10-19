@@ -115,27 +115,7 @@ export class ProjectThreeView {
     setHoveredControl(object) {
       if (this.hoveredControl === object)
         return;
-      const updateContour = (control, hovered) => {
-        if (!control)
-          return;
-        control.traverse((child) => {
-          const material = child.material;
-          if (!material || !material.userData.controlContour)
-            return;
-          if (hovered) {
-            material.color.set(COLOR_SCHEMES[this.colorSchemeName].hover);
-          } else if (material.userData.notPresented) {
-            material.color.set(COLOR_SCHEMES[this.colorSchemeName].generic);
-          } else {
-            const scheme = COLOR_SCHEMES[this.colorSchemeName];
-            const color = scheme.lighting[material.userData.engineryType] || scheme.generic;
-            material.color.set(color);
-          }
-        });
-      };
-      updateContour(this.hoveredControl, false);
       this.hoveredControl = object || null;
-      updateContour(this.hoveredControl, true);
       this.renderer.domElement.style.cursor = this.hoveredControl ? "pointer" : "";
       if (typeof this.onControlHover === "function")
         this.onControlHover(this.hoveredControl ? this.hoveredControl.userData.engineryId : null);
@@ -295,8 +275,9 @@ export class ProjectThreeView {
           enginery.presented = isPresented;
         for (const object of objects) {
           object.userData.presented = isPresented;
-          object.visible = true;
+          object.visible = isPresented;
           object.traverse((child) => {
+            child.visible = isPresented;
             if (!child.material)
               return;
             child.layers.set(CONTROL_LAYER);
