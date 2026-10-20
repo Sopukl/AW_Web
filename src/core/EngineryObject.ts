@@ -8,7 +8,7 @@ export interface EnginerySource {
   [key: string]: unknown;
 }
 
-export class EngineryObject {
+export class EngineryObject extends EventTarget {
   readonly id: number;
   readonly key: string;
   readonly name: string;
@@ -16,9 +16,9 @@ export class EngineryObject {
   readonly item: EnginerySource;
   readonly project: unknown;
   readonly units: Record<string, FUnit<unknown>> = {};
-  presented = false;
 
   constructor(item: EnginerySource, project: unknown) {
+    super();
     if (!Number.isInteger(item.id) || item.id < -2147483648 || item.id > 2147483647)
       throw new RangeError(`Enginery id must be int32: ${item.id}`);
     this.item = item;
@@ -30,6 +30,7 @@ export class EngineryObject {
   }
 
   protected register<T>(field: string, unit: FUnit<T>): FUnit<T> {
+    unit.bindChanged(() => this.dispatchEvent(new Event("changed")));
     this.units[field] = unit as FUnit<unknown>;
     return unit;
   }
@@ -42,15 +43,16 @@ export class EngineryObject {
     ) {
       value = (value as { value: unknown }).value;
     }
-    return this.units[field]?.update(value) ?? false;
+    const unit = this.units[field];
+    if (!unit)
+      return false;
+    return unit.update(value);
   }
 
   topicFields(): string[] {
     return Object.keys(this.units);
   }
 
-  applyToObjects(_objects: unknown[], _scheme: unknown, _modelOpacity: number): void {}
-  applyScheme(_objects: unknown[], _scheme: unknown): void {}
   getPopoverComponent(): string | null { return null; }
   getPopoverProps(): { enginery: EngineryObject } { return { enginery: this }; }
 }

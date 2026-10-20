@@ -11,6 +11,7 @@ import {
   TRANSPARENT_DEPTH_LAYER,
   TRANSPARENT_COLOR_LAYER
 } from "./buildModel";
+import { Control } from "./Control";
 
 export class ProjectThreeView {
     constructor(container, project, engineryStore, colorSchemeName) {
@@ -72,7 +73,6 @@ export class ProjectThreeView {
       this.resize();
       this.renderFrame = this.renderFrame.bind(this);
       this.animationFrame = requestAnimationFrame(this.renderFrame);
-      this.unsubscribeStore = engineryStore.subscribe(() => this.applyEngineryStates());
     }
 
     resize() {
@@ -168,11 +168,8 @@ export class ProjectThreeView {
         if (!material.userData.enginery)
           return;
       });
-      for (const [id, objects] of this.engineryObjects) {
-        const enginery = this.engineryStore.get(id);
-        if (enginery)
-          enginery.applyScheme(objects, scheme);
-      }
+      for (const controls of this.engineryObjects.values())
+        controls.forEach((control) => control.setScheme(scheme));
       if (this.hoveredControl) {
         const hovered = this.hoveredControl;
         this.hoveredControl = null;
@@ -269,14 +266,9 @@ export class ProjectThreeView {
 
       for (const [id, objects] of this.engineryObjects) {
         const isPresented = presented.has(id);
-        const enginery = this.engineryStore.get(id);
-        if (enginery)
-          enginery.presented = isPresented;
-        for (const object of objects) {
-          object.userData.presented = isPresented;
-          object.visible = isPresented;
-          object.traverse((child) => {
-            child.visible = isPresented;
+        for (const control of objects) {
+          control.setPresented(isPresented);
+          control.traverse((child) => {
             if (!child.material)
               return;
             child.layers.set(CONTROL_LAYER);
@@ -285,25 +277,10 @@ export class ProjectThreeView {
           });
         }
       }
-      this.applyEngineryStates();
     }
 
     updateEngineryState(engineryId, field, value) {
       this.engineryStore.updateState(engineryId, field, value);
-    }
-
-    applyEngineryStates() {
-      const scheme = COLOR_SCHEMES[this.colorSchemeName];
-      for (const [key, objects] of this.engineryObjects) {
-        const enginery = this.engineryStore.get(key);
-        if (!enginery)
-          continue;
-        for (const object of objects) {
-        const model = this.models.get(String(object.userData.modelId));
-        const modelOpacity = model ? (model.userData.opacity || 0) : 0;
-          enginery.applyToObjects([object], scheme, modelOpacity);
-        }
-      }
     }
 
     applyState(state) {
@@ -322,7 +299,13 @@ export class ProjectThreeView {
         object.userData.opacity = info.opacity;
         object.visible = info.opacity > 0.001;
         object.traverse((child) => {
+          if (child instanceof Control)
+            child.setModelOpacity(info.opacity);
+        });
+        object.traverse((child) => {
           if (!child.material)
+            return;
+          if (child.material.userData.enginery)
             return;
           const renderPass = child.material.userData.renderPass;
           if (renderPass === "transparentDepth") {
@@ -460,6 +443,8 @@ export class ProjectThreeView {
         if (raw >= 1)
           this.transition = null;
       }
+      for (const controls of this.engineryObjects.values())
+        controls.forEach((control) => control.paint());
       this.renderScene();
       this.animationFrame = requestAnimationFrame(this.renderFrame);
     }
@@ -468,8 +453,8 @@ export class ProjectThreeView {
       this.disposed = true;
       cancelAnimationFrame(this.animationFrame);
       this.resizeObserver.disconnect();
-      if (this.unsubscribeStore)
-        this.unsubscribeStore();
+      for (const controls of this.engineryObjects.values())
+        controls.forEach((control) => control.dispose());
       this.renderer.domElement.removeEventListener("click", this.handleNavigationClick);
       this.renderer.domElement.removeEventListener("click", this.handleControlClick);
       this.renderer.domElement.removeEventListener("pointermove", this.handleControlHover);

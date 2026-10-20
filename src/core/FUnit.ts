@@ -7,16 +7,23 @@ export enum FUnitState {
 export class FUnit<T> {
   value: T | undefined;
   state = FUnitState.IsEmpty;
+  private onChanged: (() => void) | null = null;
 
   constructor(private readonly validator: (value: unknown) => value is T) {}
+
+  bindChanged(handler: () => void): void {
+    this.onChanged = handler;
+  }
 
   update(value: unknown): boolean {
     if (!this.validator(value)) {
       this.state = FUnitState.IsInvalid;
+      this.onChanged?.();
       return false;
     }
     this.value = value;
     this.state = FUnitState.IsValid;
+    this.onChanged?.();
     return true;
   }
 }

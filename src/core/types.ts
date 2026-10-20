@@ -43,22 +43,3 @@ export interface ProjectData {
   locations?: RawLocation[];
 }
 
-export interface ColorScheme {
-  background: string;
-  navigation: string;
-  generic: string;
-  lighting: Record<string, string>;
-}
-
-export interface RenderMaterial {
-  color?: { set(value: string | number): void };
-  opacity: number;
-  transparent: boolean;
-  depthWrite: boolean;
-  userData: Record<string, unknown>;
-}
-
-export interface RenderObject {
-  material?: RenderMaterial;
-  traverse(callback: (object: RenderObject) => void): void;
-}

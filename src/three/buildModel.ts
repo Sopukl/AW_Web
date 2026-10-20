@@ -1,5 +1,7 @@
 // @ts-nocheck
 import * as THREE from "three";
+import { Control } from "./Control";
+import { Model } from "./Model";
 export { COLOR_SCHEMES } from "./colorSchemes";
 
   function decodeBase64(value) {
@@ -313,10 +315,8 @@ export const CONTROL_ORDER = 300;
   }
 
 export function buildModel(model, engineryById, engineryObjects, navigationObjects, colorScheme) {
-    const group = new THREE.Group();
-    group.name = "model-" + model.id;
-    group.userData.modelId = model.id;
-    group.userData.navigationSurfaces = [];
+    const group = new Model(model.id);
+    const modelControls = new Map();
     for (const surface of model.constructionSurfaces || [])
       group.add(buildSurface(surface, { construction: true }));
 
@@ -351,23 +351,24 @@ export function buildModel(model, engineryById, engineryObjects, navigationObjec
       if (!enginery || !color || !isRenderSurface(surface))
         continue;
 
-      const object = buildSurface(surface, {
+      const surfaceObject = buildSurface(surface, {
         color: color,
         enginery: true,
         engineryType: enginery.type,
         unlit: true
       });
-      object.name = "enginery-" + engineryId;
-      object.visible = false;
-      object.userData.engineryId = engineryId;
-      object.userData.modelId = model.id;
-      object.userData.presented = false;
-      group.add(object);
-
       const key = String(engineryId);
-      if (!engineryObjects.has(key))
-        engineryObjects.set(key, []);
-      engineryObjects.get(key).push(object);
+      let control = modelControls.get(key);
+      if (!control) {
+        control = new Control(enginery, model.id, colorScheme);
+        control.visible = false;
+        modelControls.set(key, control);
+        group.add(control);
+        if (!engineryObjects.has(key))
+          engineryObjects.set(key, []);
+        engineryObjects.get(key).push(control);
+      }
+      control.add(surfaceObject);
     }
     return group;
   }
