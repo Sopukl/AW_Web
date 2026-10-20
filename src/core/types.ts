@@ -2,7 +2,7 @@ export type Id = string | number;
 export type StateValue = unknown;
 
 export interface RawEnginery {
-  id: Id;
+  id: number;
   type: string;
   [key: string]: unknown;
 }

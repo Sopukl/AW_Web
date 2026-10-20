@@ -3,41 +3,27 @@ export const JOCKET = {
   "enginery": {
     "SwitchingLight": [
       "On",
-      "GroupOn",
-      "BrightnessLevel",
-      "GroupLevel",
       "Power",
-      "Chart"
     ],
     "DimmingLight": [
       "On",
-      "GroupOn",
-      "BrightnessLevel",
-      "GroupLevel",
       "Power",
-      "Chart"
+      "Level"
     ],
     "RgbLight": [
       "On",
-      "GroupOn",
-      "BrightnessLevel",
-      "GroupLevel",
       "Color",
       "Power",
-      "Chart"
+      "Level"
     ],
     "RgbwLight": [
       "On",
-      "GroupOn",
-      "BrightnessLevel",
-      "GroupLevel",
       "Color",
       "Power",
-      "Chart"
+      "Level"
     ],
     "DynamicLight": [
       "On",
-      "GroupOn",
       "ScenarioIndex"
     ],
     "LightSensor": [
@@ -80,26 +66,18 @@ export const JOCKET = {
     ],
     "EmergencyUnit": [
       "On",
-      "GroupOn",
-      "BrightnessLevel",
-      "GroupLevel",
       "ChargeLevel",
       "Mode",
-      "FunctionTest",
       "FunctionAutoTestOn",
       "LastFunctionTestInfo",
-      "DurationTest",
       "DurationAutoTestOn",
       "LastDurationTestInfo"
     ],
     "TunableWhiteLight": [
       "On",
-      "GroupOn",
-      "BrightnessLevel",
-      "GroupLevel",
+      "Level",
       "Temperature",
       "Power",
-      "Chart"
     ],
     "TemperatureSensor": [
       "Temperature",

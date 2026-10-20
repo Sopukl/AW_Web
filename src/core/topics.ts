@@ -31,7 +31,7 @@ export function buildEntityTopics(project, classifier = JOCKET) {
   for (const item of project.engineries || []) {
     if (!item.type || item.id === undefined)
       continue;
-    for (const field of fields(classifier, "enginery", item.type)) {
+    for (const field of item.topicFields()) {
       const tail = `Jocket/State/${pid}/Equipment/${item.type}/${item.id}`;
       add(list, seen, field === "#" ? tail + "/#" : tail + "/" + field, {
         kind: "Инженерия", entity: label(item), entityId: item.id, type: item.type, field

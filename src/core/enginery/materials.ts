@@ -36,11 +36,10 @@ export function applyOpacity(enginery, objects, opacity, modelOpacity) {
   }
 }
 
-export function lightOpacity(state) {
-  const on = state.On;
-  if (on === false || on === 0 || on === "0" || on === "false")
+export function lightOpacity(enginery) {
+  const on = enginery.units.On?.value;
+  if (on === false)
     return 0;
-  const raw = state.BrightnessLevel === undefined ? state.GroupLevel : state.BrightnessLevel;
-  const level = Number(raw);
+  const level = Number(enginery.units.Level?.value);
   return Number.isFinite(level) ? Math.max(0, Math.min(100, level)) / 100 : 1;
 }

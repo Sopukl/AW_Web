@@ -1,14 +1,8 @@
 // @ts-nocheck
-import { Enginery } from "../Enginery";
-import { applyColor, applyOpacity, lightOpacity } from "./materials";
+import { booleanUnit, numberUnit } from "../FUnit";
+import { LightEnginery } from "./LightEnginery";
 
-export class SwitchingLight extends Enginery {
-  applyToObjects(objects, scheme, modelOpacity) {
-    applyColor(this, objects, scheme);
-    applyOpacity(this, objects, lightOpacity(this.state), modelOpacity);
-  }
-
-  applyScheme(objects, scheme) {
-    applyColor(this, objects, scheme);
-  }
+export class SwitchingLight extends LightEnginery {
+  readonly On = this.register("On", booleanUnit());
+  readonly Power = this.register("Power", numberUnit());
 }
