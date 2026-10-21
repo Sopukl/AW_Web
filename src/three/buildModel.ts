@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { Control } from "./Control";
 import { Model } from "./Model";
+import { Surface } from "./Surface";
 export { COLOR_SCHEMES } from "./colorSchemes";
 
   function decodeBase64(value) {
@@ -211,26 +212,35 @@ export const CONTROL_ORDER = 300;
       fillGeometry.setIndex(fillIndices);
       fillGeometry.computeBoundingSphere();
 
-      const material = options.unlit
-        ? new THREE.MeshBasicMaterial({
+      const material = options.enginery
+        ? new THREE.MeshBasicMaterial()
+        : options.unlit
+          ? new THREE.MeshBasicMaterial({
           color: parsedColor.color,
           opacity: parsedColor.opacity,
           transparent: parsedColor.opacity < 1,
           side: THREE.DoubleSide,
           depthWrite: parsedColor.opacity >= 1
         })
-        : createMnemoLitMaterial(parsedColor.color, parsedColor.opacity);
-      material.polygonOffset = !!options.enginery;
-      material.polygonOffsetFactor = 1;
-      material.polygonOffsetUnits = 1;
+          : createMnemoLitMaterial(parsedColor.color, parsedColor.opacity);
+      // material.polygonOffset = !!options.enginery;
+      // material.polygonOffsetFactor = 1;
+      // material.polygonOffsetUnits = 1;
       material.userData.baseOpacity = parsedColor.opacity;
       material.userData.enginery = !!options.enginery;
       material.userData.engineryType = options.engineryType || "";
       material.userData.controlContour = false;
-      const mesh = new THREE.Mesh(fillGeometry, material);
+      const mesh = options.enginery
+        ? new Surface(fillGeometry, parsedColor.color, parsedColor.opacity)
+        : new THREE.Mesh(fillGeometry, material);
+      const meshMaterial = mesh.material;
       if (options.enginery) {
-        material.depthWrite = false;
-        material.userData.renderPass = "control";
+        Object.assign(meshMaterial.userData, material.userData);
+        material.dispose();
+      }
+      if (options.enginery) {
+        meshMaterial.depthWrite = false;
+        meshMaterial.userData.renderPass = "control";
         mesh.layers.set(CONTROL_LAYER);
         mesh.renderOrder = CONTROL_ORDER;
       } else if (options.navigation) {
@@ -368,7 +378,7 @@ export function buildModel(model, engineryById, engineryObjects, navigationObjec
           engineryObjects.set(key, []);
         engineryObjects.get(key).push(control);
       }
-      control.add(surfaceObject);
+      control.add(...surfaceObject.children.slice());
     }
     return group;
   }
