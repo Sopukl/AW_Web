@@ -3,13 +3,7 @@ import * as THREE from "three";
 import {
   buildModel,
   vector,
-  COLOR_SCHEMES,
-  OPAQUE_CONSTRUCTION_LAYER,
-  NAVIGATION_LAYER,
-  CONTROL_LAYER,
-  CONTROL_ORDER,
-  TRANSPARENT_DEPTH_LAYER,
-  TRANSPARENT_COLOR_LAYER
+  COLOR_SCHEMES
 } from "./buildModel";
 import { Control } from "./Control";
 
@@ -44,7 +38,6 @@ export class ProjectThreeView {
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       container.replaceChildren(this.renderer.domElement);
       this.raycaster = new THREE.Raycaster();
-      this.raycaster.layers.set(NAVIGATION_LAYER);
       this.pointer = new THREE.Vector2();
       this.handleNavigationClick = this.handleNavigationClick.bind(this);
       this.handleControlClick = this.handleControlClick.bind(this);
@@ -56,6 +49,7 @@ export class ProjectThreeView {
       this.renderer.domElement.addEventListener("pointerleave", this.clearControlHover);
 
       for (const model of project.models || []) {
+        console.log("model", model);
         const object = buildModel(
           model,
           this.engineryById,
@@ -89,7 +83,6 @@ export class ProjectThreeView {
         ((event.clientX - rect.left) / rect.width) * 2 - 1,
         -((event.clientY - rect.top) / rect.height) * 2 + 1
       );
-      this.raycaster.layers.set(NAVIGATION_LAYER);
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const intersections = this.raycaster.intersectObjects(this.navigationObjects, true);
       const hit = intersections.find((item) => {
@@ -126,7 +119,6 @@ export class ProjectThreeView {
         ((event.clientX - rect.left) / rect.width) * 2 - 1,
         -((event.clientY - rect.top) / rect.height) * 2 + 1
       );
-      this.raycaster.layers.set(CONTROL_LAYER);
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const controls = [];
       for (const objects of this.engineryObjects.values())
@@ -271,8 +263,6 @@ export class ProjectThreeView {
           control.traverse((child) => {
             if (!child.material)
               return;
-            child.layers.set(CONTROL_LAYER);
-            child.renderOrder = CONTROL_ORDER;
             child.material.userData.notPresented = !isPresented;
           });
         }
@@ -307,34 +297,10 @@ export class ProjectThreeView {
             return;
           if (child.material.userData.enginery)
             return;
-          const renderPass = child.material.userData.renderPass;
-          if (renderPass === "transparentDepth") {
-            child.material.opacity = 1;
-            child.material.transparent = false;
-            child.material.colorWrite = false;
-            child.material.depthWrite = true;
-            return;
-          }
-          if (child.material.userData.notPresented) {
-            child.material.opacity = 0.5 * info.opacity;
-            child.material.transparent = true;
-            child.material.depthWrite = false;
-            return;
-          }
-          if (child.material.userData.fixedOpacity) {
-            child.material.opacity = 1;
-            child.material.transparent = false;
-            child.material.depthWrite = false;
-            return;
-          }
           const baseOpacity = child.material.userData.baseOpacity === undefined
             ? 1 : child.material.userData.baseOpacity;
           child.material.opacity = baseOpacity * info.opacity;
           child.material.transparent = child.material.opacity < 1;
-          if (renderPass === "opaqueConstruction")
-            child.material.depthWrite = true;
-          else
-            child.material.depthWrite = false;
         });
       }
     }
@@ -377,60 +343,8 @@ export class ProjectThreeView {
       };
     }
 
-    setCameraLayers(layers, includeDefault) {
-      this.camera.layers.set(layers[0]);
-      for (let index = 1; index < layers.length; index++)
-        this.camera.layers.enable(layers[index]);
-      if (includeDefault)
-        this.camera.layers.enable(0);
-    }
-
-    renderLayer(layer) {
-      this.setCameraLayers([layer], true);
-      this.renderer.render(this.scene, this.camera);
-    }
-
     renderScene() {
-      const renderer = this.renderer;
-      const models = Array.from(this.models.values());
-      const visibility = models.map((model) => model.visible);
-      const previousTarget = renderer.getRenderTarget();
-      const previousAutoClear = renderer.autoClear;
-      const previousClearColor = renderer.getClearColor(new THREE.Color());
-      const previousClearAlpha = renderer.getClearAlpha();
-      const previousBackground = this.scene.background;
-      const previousLayers = this.camera.layers.mask;
-
-      renderer.autoClear = false;
-      this.scene.background = null;
-      renderer.setRenderTarget(null);
-      renderer.setClearColor(previousBackground || previousClearColor, 1);
-      renderer.clear(true, true, true);
-
-      models.forEach((model) => { model.visible = false; });
-      for (let index = 0; index < models.length; index++) {
-        if (!visibility[index])
-          continue;
-        const model = models[index];
-        model.visible = true;
-
-        this.renderLayer(OPAQUE_CONSTRUCTION_LAYER);
-
-        this.renderLayer(NAVIGATION_LAYER);
-        this.renderLayer(CONTROL_LAYER);
-
-        this.renderLayer(TRANSPARENT_DEPTH_LAYER);
-        this.renderLayer(TRANSPARENT_COLOR_LAYER);
-
-        model.visible = false;
-      }
-      models.forEach((model, index) => { model.visible = visibility[index]; });
-
-      this.scene.background = previousBackground;
-      this.camera.layers.mask = previousLayers;
-      renderer.setRenderTarget(previousTarget);
-      renderer.setClearColor(previousClearColor, previousClearAlpha);
-      renderer.autoClear = previousAutoClear;
+      this.renderer.render(this.scene, this.camera);
     }
 
     renderFrame(now) {

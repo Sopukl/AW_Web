@@ -10,8 +10,7 @@ export class Surface extends THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMat
       color,
       opacity,
       transparent: opacity < 1,
-      side: THREE.DoubleSide,
-      depthWrite: false
+      side: THREE.DoubleSide
     });
     super(geometry, material);
   }

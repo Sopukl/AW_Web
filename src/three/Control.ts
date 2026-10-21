@@ -88,7 +88,6 @@ export class Control extends THREE.Group {
           material.opacity = opacity * this.modelOpacity;
         material.transparent = material.opacity < 1;
       }
-      material.depthWrite = false;
     });
   }
 
