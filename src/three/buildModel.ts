@@ -1,8 +1,8 @@
 // @ts-nocheck
 import * as THREE from "three";
-import { Control } from "./Control";
 import { Model } from "./Model";
 import { Surface } from "./Surface";
+import { ControlFactory } from "./controls/ControlFactory";
 export { COLOR_SCHEMES } from "./colorSchemes";
 
   function decodeBase64(value) {
@@ -229,7 +229,9 @@ export function buildModel(model, engineryById, engineryObjects, navigationObjec
       const key = String(engineryId);
       let control = modelControls.get(key);
       if (!control) {
-        control = new Control(enginery, model.id, colorScheme);
+        control = ControlFactory.create(enginery, model.id, colorScheme);
+        if (!control)
+          continue;
         control.visible = false;
         modelControls.set(key, control);
         group.add(control);
