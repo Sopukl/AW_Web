@@ -4,14 +4,14 @@ import {
   type ControlColorScheme,
   type SurfaceBuilder
 } from "../Control";
-import { DimmingLightControl } from "./DimmingLightControl";
-import { DynamicLightControl } from "./DynamicLightControl";
-import { LightSensorControl } from "./LightSensorControl";
-import { PresenceSensorControl } from "./PresenceSensorControl";
-import { RgbLightControl } from "./RgbLightControl";
-import { RgbwLightControl } from "./RgbwLightControl";
-import { SwitchingLightControl } from "./SwitchingLightControl";
-import { TunableWhiteLightControl } from "./TunableWhiteLightControl";
+import { DimmingLightControl } from "./Lighting/DimmingLightControl";
+import { DynamicLightControl } from "./Lighting/DynamicLightControl";
+import { LightSensorControl } from "./Lighting/LightSensorControl";
+import { PresenceSensorControl } from "./Lighting/PresenceSensorControl";
+import { RgbLightControl } from "./Lighting/RgbLightControl";
+import { RgbwLightControl } from "./Lighting/RgbwLightControl";
+import { SwitchingLightControl } from "./Lighting/SwitchingLightControl";
+import { TunableWhiteLightControl } from "./Lighting/TunableWhiteLightControl";
 
 type ControlConstructor = new (
   enginery: EngineryObject,

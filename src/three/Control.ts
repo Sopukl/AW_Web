@@ -42,15 +42,15 @@ export class Control extends THREE.Group {
     enginery.addEventListener("changed", this.markDirty);
   }
 
-  addRenderSurface(signature: string | number): boolean {
+  addRenderSurface(
+    signature: string | number,
+    depthWrite = true
+  ): boolean {
     const surface = this.modelSurfaces.find((candidate) => {
-      const engineryId = candidate.DeviceId === undefined
-        ? candidate.engineryID
-        : candidate.DeviceId;
       const sameSignature = candidate.Signature === signature ||
         (typeof signature === "string" &&
           candidate.Signature === signature.charCodeAt(0));
-      return String(engineryId) === String(this.enginery.id) && sameSignature;
+      return String(candidate.DeviceId) === String(this.enginery.id) && sameSignature;
     });
     if (!surface)
       return false;
@@ -60,7 +60,12 @@ export class Control extends THREE.Group {
       enginery: true,
       engineryType: this.enginery.type
     });
-    this.add(...object.children.slice());
+    const children = object.children.slice();
+    for (const child of children) {
+      if (child instanceof Surface)
+        child.depthWrite = depthWrite;
+    }
+    this.add(...children);
     this._dirty = true;
     return true;
   }

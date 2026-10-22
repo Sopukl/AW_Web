@@ -1,4 +1,4 @@
-import { booleanUnit, numberUnit } from "../FUnit";
+import { booleanUnit, numberUnit } from "../../FUnit";
 import { LightEnginery } from "./LightEnginery";
 
 export class TunableWhiteLight extends LightEnginery {

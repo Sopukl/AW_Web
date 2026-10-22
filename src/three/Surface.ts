@@ -30,4 +30,12 @@ export class Surface extends THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMat
   set opacity(value: number) {
     this.material.opacity = value;
   }
+
+  get depthWrite(): boolean {
+    return this.material.depthWrite;
+  }
+
+  set depthWrite(value: boolean) {
+    this.material.depthWrite = value;
+  }
 }

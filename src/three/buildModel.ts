@@ -143,6 +143,8 @@ function buildSurface(surface, options = {}) {
     fillGeometry.computeBoundingSphere();
 
     const mesh = new Surface(fillGeometry, parsedColor.color, parsedColor.opacity);
+    if (options.depthWrite !== undefined)
+      mesh.depthWrite = options.depthWrite;
     mesh.material.userData.baseOpacity = parsedColor.opacity;
     mesh.material.userData.enginery = !!options.enginery;
     mesh.material.userData.engineryType = options.engineryType || "";
@@ -190,7 +192,8 @@ export function buildModel(model, engineryById, engineryObjects, navigationObjec
         ? surface.locationID : surface.LocationId;
       const object = buildSurface(surface, {
         color: colorScheme.navigation,
-        navigation: true
+        navigation: true,
+        depthWrite: false
       });
       object.name = "navigation-" + locationId;
       object.visible = false;
@@ -209,9 +212,9 @@ export function buildModel(model, engineryById, engineryObjects, navigationObjec
     }
 
     const enginerySurfaces = model.enginerySurfaces || [];
-    const engineryIds = new Set(enginerySurfaces.map((surface) =>
-      surface.DeviceId === undefined ? surface.engineryID : surface.DeviceId
-    ));
+    const engineryIds = new Set(
+      enginerySurfaces.map((surface) => surface.DeviceId)
+    );
     for (const engineryId of engineryIds) {
       const enginery = engineryById.get(String(engineryId));
       const color = colorScheme.lighting[enginery && enginery.type];
