@@ -233,28 +233,45 @@ table { width: max-content; min-width: 100%; }
   position: relative;
 }
 
-.location-step summary {
-  padding: 9px 13px;
+.location-step-control {
+  display: flex;
+  align-items: stretch;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: rgb(255 253 248 / 94%);
   box-shadow: 0 3px 12px rgb(28 25 21 / 12%);
-  cursor: pointer;
-  list-style: none;
+  overflow: hidden;
   white-space: nowrap;
 }
 
-.location-step summary::-webkit-details-marker {
-  display: none;
+.location-step-title,
+.location-step-toggle {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
 }
 
-.location-step summary::after {
-  content: " ▾";
+.location-step-title {
+  padding: 9px 4px 9px 13px;
+}
+
+.location-step-title:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.location-step-toggle {
+  padding: 9px 11px 9px 7px;
   color: var(--muted);
 }
 
-.location-step summary.active {
+.location-step-control.active {
   border-color: var(--accent);
+  color: var(--accent);
+}
+
+.location-step-control.active .location-step-title {
   color: var(--accent);
 }
 
