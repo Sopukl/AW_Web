@@ -1,5 +1,9 @@
 import type { EngineryObject } from "../../core/EngineryObject";
-import { Control, type ControlColorScheme } from "../Control";
+import {
+  Control,
+  type ControlColorScheme,
+  type SurfaceBuilder
+} from "../Control";
 import { DimmingLightControl } from "./DimmingLightControl";
 import { DynamicLightControl } from "./DynamicLightControl";
 import { LightSensorControl } from "./LightSensorControl";
@@ -12,7 +16,9 @@ import { TunableWhiteLightControl } from "./TunableWhiteLightControl";
 type ControlConstructor = new (
   enginery: EngineryObject,
   modelId: string | number,
-  scheme: ControlColorScheme
+  scheme: ControlColorScheme,
+  modelSurfaces: Record<string, any>[],
+  surfaceBuilder: SurfaceBuilder
 ) => Control;
 
 const registry = new Map<string, ControlConstructor>([
@@ -30,9 +36,13 @@ export const ControlFactory = {
   create(
     enginery: EngineryObject,
     modelId: string | number,
-    scheme: ControlColorScheme
+    scheme: ControlColorScheme,
+    modelSurfaces: Record<string, any>[],
+    surfaceBuilder: SurfaceBuilder
   ): Control | null {
     const Constructor = registry.get(enginery.type);
-    return Constructor ? new Constructor(enginery, modelId, scheme) : null;
+    return Constructor
+      ? new Constructor(enginery, modelId, scheme, modelSurfaces, surfaceBuilder)
+      : null;
   }
 };

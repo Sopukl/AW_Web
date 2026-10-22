@@ -84,10 +84,6 @@ export function vector(value, fallback) {
     );
   }
 
-function isRenderSurface(surface) {
-  return surface.Signature === "S" || surface.Signature === 83;
-}
-
 function isFlatNavigationSurface(surface) {
   for (const subsurface of surface.subsurfaces || []) {
     const vertices = decodeVertices(subsurface.vertices);
@@ -212,34 +208,35 @@ export function buildModel(model, engineryById, engineryObjects, navigationObjec
       group.add(object);
     }
 
-    for (const surface of model.enginerySurfaces || []) {
-      const engineryId = surface.DeviceId === undefined
-        ? surface.engineryID : surface.DeviceId;
+    const enginerySurfaces = model.enginerySurfaces || [];
+    const engineryIds = new Set(enginerySurfaces.map((surface) =>
+      surface.DeviceId === undefined ? surface.engineryID : surface.DeviceId
+    ));
+    for (const engineryId of engineryIds) {
       const enginery = engineryById.get(String(engineryId));
       const color = colorScheme.lighting[enginery && enginery.type];
-      if (!enginery || !color || !isRenderSurface(surface))
+      if (!enginery || !color)
         continue;
 
-      const surfaceObject = buildSurface(surface, {
-        color: color,
-        enginery: true,
-        engineryType: enginery.type,
-        unlit: true
-      });
       const key = String(engineryId);
-      let control = modelControls.get(key);
-      if (!control) {
-        control = ControlFactory.create(enginery, model.id, colorScheme);
-        if (!control)
-          continue;
-        control.visible = false;
-        modelControls.set(key, control);
-        group.add(control);
-        if (!engineryObjects.has(key))
-          engineryObjects.set(key, []);
-        engineryObjects.get(key).push(control);
-      }
-      control.add(...surfaceObject.children.slice());
+      const control = ControlFactory.create(
+        enginery,
+        model.id,
+        colorScheme,
+        enginerySurfaces,
+        buildSurface
+      );
+      if (!control)
+        continue;
+      control.build();
+      if (!control.children.length)
+        continue;
+      control.visible = false;
+      modelControls.set(key, control);
+      group.add(control);
+      if (!engineryObjects.has(key))
+        engineryObjects.set(key, []);
+      engineryObjects.get(key).push(control);
     }
     return group;
   }

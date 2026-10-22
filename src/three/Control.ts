@@ -8,21 +8,33 @@ export interface ControlColorScheme {
   lighting: Record<string, string>;
 }
 
+export type SurfaceBuilder = (
+  surface: Record<string, unknown>,
+  options: Record<string, unknown>
+) => THREE.Group;
+
 export class Control extends THREE.Group {
   readonly enginery: EngineryObject;
   _dirty = true;
   private scheme: ControlColorScheme;
   private modelOpacity = 0;
   private presented = false;
+  private readonly modelSurfaces: Record<string, any>[];
+  private readonly surfaceBuilder: SurfaceBuilder;
+  private readonly markDirty = (): void => { this._dirty = true; };
 
   constructor(
     enginery: EngineryObject,
     modelId: string | number,
-    scheme: ControlColorScheme
+    scheme: ControlColorScheme,
+    modelSurfaces: Record<string, any>[],
+    surfaceBuilder: SurfaceBuilder
   ) {
     super();
     this.enginery = enginery;
     this.scheme = scheme;
+    this.modelSurfaces = modelSurfaces;
+    this.surfaceBuilder = surfaceBuilder;
     this.name = `enginery-${enginery.id}`;
     this.userData.engineryId = enginery.id;
     this.userData.modelId = modelId;
@@ -30,9 +42,30 @@ export class Control extends THREE.Group {
     enginery.addEventListener("changed", this.markDirty);
   }
 
-  private markDirty(): void {
+  addRenderSurface(signature: string | number): boolean {
+    const surface = this.modelSurfaces.find((candidate) => {
+      const engineryId = candidate.DeviceId === undefined
+        ? candidate.engineryID
+        : candidate.DeviceId;
+      const sameSignature = candidate.Signature === signature ||
+        (typeof signature === "string" &&
+          candidate.Signature === signature.charCodeAt(0));
+      return String(engineryId) === String(this.enginery.id) && sameSignature;
+    });
+    if (!surface)
+      return false;
+
+    const object = this.surfaceBuilder(surface, {
+      color: this.scheme.lighting[this.enginery.type] || this.scheme.generic,
+      enginery: true,
+      engineryType: this.enginery.type
+    });
+    this.add(...object.children.slice());
     this._dirty = true;
+    return true;
   }
+
+  build(): void {}
 
   setPresented(value: boolean): void {
     if (this.presented === value)

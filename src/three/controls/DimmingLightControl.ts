@@ -1,3 +1,3 @@
-import { Control } from "../Control";
+import { LightControl } from "./LightControl";
 
-export class DimmingLightControl extends Control {}
+export class DimmingLightControl extends LightControl {}
