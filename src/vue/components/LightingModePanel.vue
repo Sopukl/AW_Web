@@ -51,37 +51,106 @@ const page = computed(() => {
   version.value;
   return lightingState.value?.page;
 });
+const sliderOne = ref(1);
+const sliderTwo = ref(1);
+const canIncrease = computed(() =>
+  state.value === State.Hidden || state.value === State.Normal
+);
+const canDecrease = computed(() =>
+  state.value === State.Normal || state.value === State.Monopoly
+);
+const canIncreasePage = computed(() =>
+  page.value === Page.Light || page.value === Page.Sensors
+);
+const canDecreasePage = computed(() =>
+  page.value === Page.Sensors || page.value === Page.Area
+);
 
-function setState(value: State): void {
-  if (lightingState.value)
-    lightingState.value.state = value;
+function increaseState(): void {
+  if (!lightingState.value)
+    return;
+  if (state.value === State.Hidden)
+    lightingState.value.state = State.Normal;
+  else if (state.value === State.Normal)
+    lightingState.value.state = State.Monopoly;
+}
+
+function decreaseState(): void {
+  if (!lightingState.value)
+    return;
+  if (state.value === State.Monopoly)
+    lightingState.value.state = State.Normal;
+  else if (state.value === State.Normal)
+    lightingState.value.state = State.Hidden;
 }
 
 function setPage(value: Page): void {
   if (lightingState.value)
     lightingState.value.page = value;
 }
+
+function increasePage(): void {
+  if (page.value === Page.Light)
+    setPage(Page.Sensors);
+  else if (page.value === Page.Sensors)
+    setPage(Page.Area);
+}
+
+function decreasePage(): void {
+  if (page.value === Page.Area)
+    setPage(Page.Sensors);
+  else if (page.value === Page.Sensors)
+    setPage(Page.Light);
+}
 </script>
 
 <template>
   <aside v-if="hasLighting && lightingState" class="lighting-mode-panel">
-    <div class="lighting-mode-group" aria-label="Режим подсистемы света">
-      <button
-        v-for="value in [State.Hidden, State.Normal, State.Monopoly]"
-        :key="value"
-        type="button"
-        :class="{ active: state === value }"
-        @click="setState(value)"
-      >{{ value }}</button>
+    <div class="lighting-mode-content">
+      <div v-if="state === State.Normal" class="lighting-mode-column">
+        <input v-model.number="sliderOne" type="range" min="0" max="2" step="1">
+        <input v-model.number="sliderTwo" type="range" min="0" max="2" step="1">
+      </div>
+
+      <template v-else-if="state === State.Monopoly">
+        <button
+          type="button"
+          class="lighting-page-arrow lighting-page-arrow-up"
+          aria-label="Увеличить страницу"
+          :disabled="!canIncreasePage"
+          @click="increasePage"
+        >▲</button>
+        <div v-if="page === Page.Light" class="lighting-mode-column">
+          <button v-for="number in 4" :key="number" type="button">{{ number }}</button>
+        </div>
+        <div v-else-if="page === Page.Sensors" class="lighting-mode-column">
+          <input v-model.number="sliderOne" type="range" min="0" max="2" step="1">
+          <input v-model.number="sliderTwo" type="range" min="0" max="2" step="1">
+        </div>
+        <div v-else class="lighting-mode-empty" aria-label="Area"></div>
+        <button
+          type="button"
+          class="lighting-page-arrow lighting-page-arrow-down"
+          aria-label="Уменьшить страницу"
+          :disabled="!canDecreasePage"
+          @click="decreasePage"
+        >▼</button>
+      </template>
     </div>
-    <div class="lighting-mode-group" aria-label="Страница подсистемы света">
+
+    <div class="lighting-state-arrows" aria-label="Режим подсистемы света">
       <button
-        v-for="value in [Page.Light, Page.Sensors, Page.Area]"
-        :key="value"
         type="button"
-        :class="{ active: page === value }"
-        @click="setPage(value)"
-      >{{ value }}</button>
+        aria-label="Увеличить режим"
+        :disabled="!canIncrease"
+        @click="increaseState"
+      >▶</button>
+      <button
+        type="button"
+        aria-label="Уменьшить режим"
+        :disabled="!canDecrease"
+        @click="decreaseState"
+      >◀</button>
     </div>
   </aside>
 </template>
