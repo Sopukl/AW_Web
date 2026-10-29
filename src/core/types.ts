@@ -28,6 +28,16 @@ export interface RawLocation {
   [key: string]: unknown;
 }
 
+export interface RawSubginery {
+  type: string;
+  id: number;
+  key?: string;
+  name?: string;
+  locationID: number;
+  engineries?: number[];
+  [key: string]: unknown;
+}
+
 export interface ProjectData {
   id: Id;
   name?: string;
@@ -36,7 +46,7 @@ export interface ProjectData {
   files?: string[];
   models?: unknown[];
   engineries?: RawEnginery[];
-  subgineries?: Record<string, unknown>[];
+  subgineries?: RawSubginery[];
   servers?: Record<string, unknown>[];
   managers?: Record<string, unknown>[];
   providers?: Record<string, unknown>[];

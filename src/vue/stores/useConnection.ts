@@ -86,6 +86,8 @@ export function useConnection(projectStore, engineryStore) {
         continue;
       if (row.entityId !== null && row.entityId !== undefined)
         engineryStore.core.updateState(row.entityId, row.field, data[row.field]);
+      else if (row.stateTarget)
+        row.stateTarget.updateState(row.field, data[row.field]);
       const value = data[row.field];
       row.value = typeof value === "object" ? JSON.stringify(value) : String(value);
       row.at = at;

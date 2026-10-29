@@ -229,6 +229,28 @@ table { width: max-content; min-width: 100%; }
   text-shadow: 0 1px 3px rgb(0 0 0 / 55%);
 }
 
+.breadcrumb-action {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  padding: 4px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgb(255 253 248 / 94%);
+  box-shadow: 0 3px 12px rgb(28 25 21 / 12%);
+}
+
+.breadcrumb-action img {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+
+.breadcrumb-action:disabled {
+  opacity: 0.4;
+}
+
 .location-step {
   position: relative;
 }

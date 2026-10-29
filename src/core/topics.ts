@@ -34,20 +34,27 @@ export function buildEntityTopics(project, classifier = JOCKET) {
     for (const field of item.topicFields()) {
       const tail = `Jocket/State/${pid}/Equipment/${item.type}/${item.id}`;
       add(list, seen, field === "#" ? tail + "/#" : tail + "/" + field, {
-        kind: "Инженерия", entity: label(item), entityId: item.id, type: item.type, field
+        kind: "Инженерия", entity: label(item), entityId: item.id,
+        type: item.type, field, stateTarget: item
       });
     }
   }
   for (const item of project.subgineries || []) {
     if (!item.type)
       continue;
-    const id = item.locationID !== undefined && item.locationID !== null && item.locationID >= 0
-      ? item.locationID : item.id;
-    const entity = label(item) + (locations.get(id) ? " · " + locations.get(id) : "");
-    for (const field of fields(classifier, "subginery", item.type)) {
-      const tail = `Jocket/State/${pid}/Equipment/${item.type}/${id}`;
+    const entity = label(item) +
+      (locations.get(item.locationID) ? " · " + locations.get(item.locationID) : "");
+    for (const field of item.topicFields()) {
+      const tail = `Jocket/State/${pid}/Equipment/${item.type}/${item.id}`;
       add(list, seen, field === "#" ? tail + "/#" : tail + "/" + field,
-        { kind: "Сабджинерия", entity, type: item.type, field });
+        {
+          kind: "Сабджинерия",
+          entity,
+          type: item.type,
+          field,
+          classId: item.classId(field),
+          stateTarget: item
+        });
     }
   }
   const managers = new Map((project.managers || []).map((item) => [item.id, item]));
