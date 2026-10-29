@@ -3,10 +3,11 @@ import { inject, ref, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { ProjectThreeView } from "../../../three/ProjectThreeView";
 import { projectKey, engineryKey } from "../../stores/keys";
 import LocationBreadcrumb from "../LocationBreadcrumb.vue";
+import LightingModePanel from "../LightingModePanel.vue";
 
 
 export const ThreePanel = {
-  components: { LocationBreadcrumb },
+  components: { LocationBreadcrumb, LightingModePanel },
   emits: ["settings"],
   setup() {
     const project = inject(projectKey);
@@ -59,6 +60,7 @@ export const ThreePanel = {
     <section class="panel three-view">
       <div class="three-stage">
         <LocationBreadcrumb />
+        <LightingModePanel />
         <div id="three-view-container" ref="container"></div>
         <div v-if="project.view3dError.value" class="three-message error">{{ project.view3dError.value }}</div>
         <div v-else-if="!project.locations.value.length" class="three-message">В проекте нет локаций.</div>

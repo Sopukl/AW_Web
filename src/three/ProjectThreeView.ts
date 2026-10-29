@@ -251,15 +251,28 @@ export class ProjectThreeView {
       this.clearControlHover();
       const location = this.locations.get(String(locationId));
       const presented = new Set();
+      const subgineryTypeByEnginery = new Map();
       for (const model of (location && location.models) || []) {
         for (const control of model.controls || [])
           presented.add(String(control.engineryID));
       }
+      for (const [type, subginery] of location?.subgineries || []) {
+        for (const enginery of subginery.engineries || [])
+          subgineryTypeByEnginery.set(String(enginery.id), type);
+      }
+      const projectStates = this.project.subgineryStates || [];
 
       for (const [id, objects] of this.engineryObjects) {
         const isPresented = presented.has(id);
+        const subgineryType = subgineryTypeByEnginery.get(id);
+        const subgineryState = subgineryType
+          ? this.project.subgineryState(subgineryType)
+          : null;
         for (const control of objects) {
-          control.setPresented(isPresented);
+          if (isPresented)
+            control.activate(subgineryState, projectStates);
+          else
+            control.deactivate();
           control.traverse((child) => {
             if (!child.material)
               return;

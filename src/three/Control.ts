@@ -1,6 +1,7 @@
 // @ts-nocheck
 import * as THREE from "three";
 import type { EngineryObject } from "../core/EngineryObject";
+import { State, type SubgineryState } from "../core/SubgineryState";
 import { Surface } from "./Surface";
 
 export interface ControlColorScheme {
@@ -19,9 +20,15 @@ export class Control extends THREE.Group {
   private scheme: ControlColorScheme;
   private modelOpacity = 0;
   private presented = false;
+  protected activeSubgineryState: SubgineryState | null = null;
+  private activeProjectStates: SubgineryState[] = [];
   private readonly modelSurfaces: Record<string, any>[];
   private readonly surfaceBuilder: SurfaceBuilder;
   private readonly markDirty = (): void => { this._dirty = true; };
+  private readonly handleStateChanged = (): void => {
+    this.refreshVisibility();
+    this._dirty = true;
+  };
 
   constructor(
     enginery: EngineryObject,
@@ -72,14 +79,43 @@ export class Control extends THREE.Group {
 
   build(): void {}
 
-  setPresented(value: boolean): void {
-    if (this.presented === value)
-      return;
-    this.presented = value;
-    this.userData.presented = value;
-    this.visible = value;
-    this.traverse((child) => { child.visible = value; });
+  activate(
+    subgineryState: SubgineryState | null,
+    projectStates: SubgineryState[]
+  ): void {
+    this.deactivate();
+    this.presented = true;
+    this.userData.presented = true;
+    this.activeSubgineryState = subgineryState;
+    this.activeProjectStates = projectStates.slice();
+    for (const state of this.activeProjectStates)
+      state.addEventListener("stateChanged", this.handleStateChanged);
+    this.refreshVisibility();
     this._dirty = true;
+  }
+
+  deactivate(): void {
+    for (const state of this.activeProjectStates)
+      state.removeEventListener("stateChanged", this.handleStateChanged);
+    this.activeProjectStates = [];
+    this.activeSubgineryState = null;
+    this.presented = false;
+    this.userData.presented = false;
+    this.refreshVisibility();
+  }
+
+  protected isVisibleForSubgineryState(): boolean {
+    if (this.activeSubgineryState?.state === State.Hidden)
+      return false;
+    return !this.activeProjectStates.some((state) =>
+      state !== this.activeSubgineryState && state.state === State.Monopoly
+    );
+  }
+
+  protected refreshVisibility(): void {
+    const visible = this.presented && this.isVisibleForSubgineryState();
+    this.visible = visible;
+    this.traverse((child) => { child.visible = visible; });
   }
 
   setScheme(scheme: ControlColorScheme): void {
@@ -130,6 +166,7 @@ export class Control extends THREE.Group {
   }
 
   dispose(): void {
+    this.deactivate();
     this.enginery.removeEventListener("changed", this.markDirty);
   }
 }

@@ -251,6 +251,37 @@ table { width: max-content; min-width: 100%; }
   opacity: 0.4;
 }
 
+.lighting-mode-panel {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgb(255 253 248 / 94%);
+  box-shadow: 0 3px 12px rgb(28 25 21 / 12%);
+}
+
+.lighting-mode-group {
+  display: flex;
+  gap: 4px;
+}
+
+.lighting-mode-group button {
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--ink);
+}
+
+.lighting-mode-group button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
 .location-step {
   position: relative;
 }
