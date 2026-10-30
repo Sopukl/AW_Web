@@ -256,18 +256,51 @@ table { width: max-content; min-width: 100%; }
   top: 50%;
   left: 14px;
   z-index: 5;
-  width: 230px;
+  width: 50px;
   min-height: 180px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: rgb(255 253 248 / 94%);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: rgb(255 255 255 / 50%);
   box-shadow: 0 3px 12px rgb(28 25 21 / 12%);
   transform: translateY(-50%);
+  transition: width 200ms ease;
+}
+
+.lighting-mode-panel::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  background: #e42583;
+  pointer-events: none;
+}
+
+.lighting-mode-panel.state-hidden {
+  width: 10px;
+}
+
+.lighting-mode-panel.state-normal {
+  width: 50px;
+}
+
+.lighting-mode-panel.state-monopoly {
+  width: 75px;
 }
 
 .lighting-mode-content {
+  position: relative;
+  z-index: 1;
   min-height: 162px;
+  padding-right: 8px;
+}
+
+.lighting-mode-panel.state-monopoly .lighting-mode-content {
+  padding-top: 42px;
+  padding-bottom: 42px;
 }
 
 .lighting-mode-column {
@@ -294,8 +327,47 @@ table { width: max-content; min-width: 100%; }
   color: var(--ink);
 }
 
+.lighting-mode-column button img {
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: auto;
+}
+
+.lighting-mode-column button {
+  padding: 2px;
+}
+
 .lighting-mode-empty {
   min-height: 120px;
+}
+
+.lighting-page-viewport {
+  position: relative;
+  height: 204px;
+  overflow: hidden;
+}
+
+.lighting-page-panel {
+  position: absolute;
+  inset: 0;
+}
+
+.lighting-page-up-enter-active,
+.lighting-page-up-leave-active,
+.lighting-page-down-enter-active,
+.lighting-page-down-leave-active {
+  transition: transform 200ms ease;
+}
+
+.lighting-page-up-enter-from,
+.lighting-page-down-leave-to {
+  transform: translateY(100%);
+}
+
+.lighting-page-up-leave-to,
+.lighting-page-down-enter-from {
+  transform: translateY(-100%);
 }
 
 .lighting-page-arrow {
@@ -310,11 +382,11 @@ table { width: max-content; min-width: 100%; }
 }
 
 .lighting-page-arrow-up {
-  top: -45px;
+  top: 4px;
 }
 
 .lighting-page-arrow-down {
-  bottom: -45px;
+  bottom: 4px;
 }
 
 .lighting-page-arrow:disabled {

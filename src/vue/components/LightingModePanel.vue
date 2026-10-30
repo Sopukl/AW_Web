@@ -6,12 +6,22 @@ import {
   Page,
   SubgineryLightingState
 } from "../../core/enginery/Lighting/SubgineryLightingState";
+import onIcon from "../../assets/Subginery/Lighting/Subginery/On.svg";
+import scene1Icon from "../../assets/Subginery/Lighting/Subginery/Scene1.svg";
+import scene2Icon from "../../assets/Subginery/Lighting/Subginery/Scene2.svg";
+import offIcon from "../../assets/Subginery/Lighting/Subginery/Off.svg";
 
 const project = inject(projectKey);
 if (!project)
   throw new Error("Project store is not provided");
 
 const version = ref(0);
+const lightButtons = [
+  { name: "On", icon: onIcon },
+  { name: "Scene 1", icon: scene1Icon },
+  { name: "Scene 2", icon: scene2Icon },
+  { name: "Off", icon: offIcon }
+];
 let observedState: SubgineryLightingState | null = null;
 const changed = (): void => { version.value++; };
 
@@ -53,6 +63,7 @@ const page = computed(() => {
 });
 const sliderOne = ref(1);
 const sliderTwo = ref(1);
+const pageDirection = ref<"up" | "down">("up");
 const canIncrease = computed(() =>
   state.value === State.Hidden || state.value === State.Normal
 );
@@ -90,6 +101,7 @@ function setPage(value: Page): void {
 }
 
 function increasePage(): void {
+  pageDirection.value = "up";
   if (page.value === Page.Light)
     setPage(Page.Sensors);
   else if (page.value === Page.Sensors)
@@ -97,6 +109,7 @@ function increasePage(): void {
 }
 
 function decreasePage(): void {
+  pageDirection.value = "down";
   if (page.value === Page.Area)
     setPage(Page.Sensors);
   else if (page.value === Page.Sensors)
@@ -105,7 +118,15 @@ function decreasePage(): void {
 </script>
 
 <template>
-  <aside v-if="hasLighting && lightingState" class="lighting-mode-panel">
+  <aside
+    v-if="hasLighting && lightingState"
+    class="lighting-mode-panel"
+    :class="{
+      'state-hidden': state === State.Hidden,
+      'state-normal': state === State.Normal,
+      'state-monopoly': state === State.Monopoly
+    }"
+  >
     <div class="lighting-mode-content">
       <div v-if="state === State.Normal" class="lighting-mode-column">
         <input v-model.number="sliderOne" type="range" min="0" max="2" step="1">
@@ -120,14 +141,28 @@ function decreasePage(): void {
           :disabled="!canIncreasePage"
           @click="increasePage"
         >▲</button>
-        <div v-if="page === Page.Light" class="lighting-mode-column">
-          <button v-for="number in 4" :key="number" type="button">{{ number }}</button>
+        <div class="lighting-page-viewport">
+          <Transition :name="'lighting-page-' + pageDirection">
+            <div :key="page" class="lighting-page-panel">
+              <div v-if="page === Page.Light" class="lighting-mode-column">
+                <button
+                  v-for="button in lightButtons"
+                  :key="button.name"
+                  type="button"
+                  :aria-label="button.name"
+                  :title="button.name"
+                >
+                  <img :src="button.icon" alt="">
+                </button>
+              </div>
+              <div v-else-if="page === Page.Sensors" class="lighting-mode-column">
+                <input v-model.number="sliderOne" type="range" min="0" max="2" step="1">
+                <input v-model.number="sliderTwo" type="range" min="0" max="2" step="1">
+              </div>
+              <div v-else class="lighting-mode-empty" aria-label="Area"></div>
+            </div>
+          </Transition>
         </div>
-        <div v-else-if="page === Page.Sensors" class="lighting-mode-column">
-          <input v-model.number="sliderOne" type="range" min="0" max="2" step="1">
-          <input v-model.number="sliderTwo" type="range" min="0" max="2" step="1">
-        </div>
-        <div v-else class="lighting-mode-empty" aria-label="Area"></div>
         <button
           type="button"
           class="lighting-page-arrow lighting-page-arrow-down"
