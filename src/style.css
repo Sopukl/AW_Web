@@ -252,6 +252,7 @@ table { width: max-content; min-width: 100%; }
 }
 
 .lighting-mode-panel {
+  --lighting-color: #e42583;
   position: absolute;
   top: 50%;
   left: 14px;
@@ -275,7 +276,7 @@ table { width: max-content; min-width: 100%; }
   right: 0;
   bottom: 0;
   width: 8px;
-  background: #e42583;
+  background: var(--lighting-color);
   pointer-events: none;
 }
 
@@ -309,12 +310,69 @@ table { width: max-content; min-width: 100%; }
   gap: 4px;
 }
 
-.lighting-mode-column input[type="range"] {
-  display: block;
+.lighting-icon-slider {
+  position: relative;
+  width: 40px;
+  height: 100px;
+  align-self: center;
+  border: 2px solid var(--lighting-color);
+  border-radius: 20px;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.lighting-icon-slider > span {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: 32px;
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--lighting-color);
+  border-radius: 50%;
+  background: transparent;
+  box-sizing: border-box;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: bottom 120ms ease;
+}
+
+.lighting-icon-slider > span svg {
+  position: absolute;
+  inset: 3px;
+  width: 26px;
+  height: 26px;
+}
+
+.lighting-icon-slider > span svg .st0 {
+  fill: var(--lighting-color) !important;
+}
+
+.lighting-icon-slider > span svg .st1 {
+  stroke: var(--lighting-color) !important;
+}
+
+.lighting-icon-slider.position-0 > span {
+  bottom: 4px;
+}
+
+.lighting-icon-slider.position-1 > span {
+  bottom: 32px;
+}
+
+.lighting-icon-slider.position-2 > span {
+  bottom: 60px;
+}
+
+.lighting-icon-slider input[type="range"] {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
   width: 40px;
   height: 100px;
   margin: 0;
-  align-self: center;
+  opacity: 0;
+  cursor: pointer;
   direction: rtl;
   writing-mode: vertical-lr;
 }
@@ -327,11 +385,20 @@ table { width: max-content; min-width: 100%; }
   color: var(--ink);
 }
 
-.lighting-mode-column button img {
+.lighting-action-icon,
+.lighting-action-icon svg {
   display: block;
   width: 40px;
   height: 40px;
   margin: auto;
+}
+
+.lighting-action-icon svg .st0 {
+  stroke: var(--lighting-color) !important;
+}
+
+.lighting-action-icon svg .st1 {
+  fill: var(--lighting-color) !important;
 }
 
 .lighting-mode-column button {

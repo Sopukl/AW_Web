@@ -6,10 +6,12 @@ import {
   Page,
   SubgineryLightingState
 } from "../../core/enginery/Lighting/SubgineryLightingState";
-import onIcon from "../../assets/Subginery/Lighting/Subginery/On.svg";
-import scene1Icon from "../../assets/Subginery/Lighting/Subginery/Scene1.svg";
-import scene2Icon from "../../assets/Subginery/Lighting/Subginery/Scene2.svg";
-import offIcon from "../../assets/Subginery/Lighting/Subginery/Off.svg";
+import onIcon from "../../assets/Subginery/Lighting/Subginery/On.svg?raw";
+import scene1Icon from "../../assets/Subginery/Lighting/Subginery/Scene1.svg?raw";
+import scene2Icon from "../../assets/Subginery/Lighting/Subginery/Scene2.svg?raw";
+import offIcon from "../../assets/Subginery/Lighting/Subginery/Off.svg?raw";
+import presenceSensorIcon from "../../assets/Subginery/Lighting/Subginery/PresenceSensorOn.svg?raw";
+import lightSensorIcon from "../../assets/Subginery/Lighting/Subginery/LightSensorOn.svg?raw";
 
 const project = inject(projectKey);
 if (!project)
@@ -129,8 +131,16 @@ function decreasePage(): void {
   >
     <div class="lighting-mode-content">
       <div v-if="state === State.Normal" class="lighting-mode-column">
-        <input v-model.number="sliderOne" type="range" min="0" max="2" step="1">
-        <input v-model.number="sliderTwo" type="range" min="0" max="2" step="1">
+        <div class="lighting-icon-slider" :class="'position-' + sliderOne">
+          <span v-html="presenceSensorIcon"></span>
+          <input v-model.number="sliderOne" type="range"
+            min="0" max="2" step="1" aria-label="Presence sensor">
+        </div>
+        <div class="lighting-icon-slider" :class="'position-' + sliderTwo">
+          <span v-html="lightSensorIcon"></span>
+          <input v-model.number="sliderTwo" type="range"
+            min="0" max="2" step="1" aria-label="Light sensor">
+        </div>
       </div>
 
       <template v-else-if="state === State.Monopoly">
@@ -152,12 +162,20 @@ function decreasePage(): void {
                   :aria-label="button.name"
                   :title="button.name"
                 >
-                  <img :src="button.icon" alt="">
+                  <span class="lighting-action-icon" v-html="button.icon"></span>
                 </button>
               </div>
               <div v-else-if="page === Page.Sensors" class="lighting-mode-column">
-                <input v-model.number="sliderOne" type="range" min="0" max="2" step="1">
-                <input v-model.number="sliderTwo" type="range" min="0" max="2" step="1">
+                <div class="lighting-icon-slider" :class="'position-' + sliderOne">
+                  <span v-html="presenceSensorIcon"></span>
+                  <input v-model.number="sliderOne" type="range"
+                    min="0" max="2" step="1" aria-label="Presence sensor">
+                </div>
+                <div class="lighting-icon-slider" :class="'position-' + sliderTwo">
+                  <span v-html="lightSensorIcon"></span>
+                  <input v-model.number="sliderTwo" type="range"
+                    min="0" max="2" step="1" aria-label="Light sensor">
+                </div>
               </div>
               <div v-else class="lighting-mode-empty" aria-label="Area"></div>
             </div>
