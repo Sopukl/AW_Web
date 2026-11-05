@@ -207,43 +207,24 @@ export class ProjectThreeView {
 
     setLocationNavigations(locationId) {
       const location = this.locations.get(String(locationId));
-      const locationModels = new Map(
-        ((location && location.models) || []).map((model) => [String(model.id), model])
-      );
+      const targets = new Set();
+      for (const model of (location && location.models) || []) {
+        for (const transition of model.transitions || []) {
+          if (transition.locationID !== undefined && transition.locationID !== null)
+            targets.add(String(transition.locationID));
+        }
+      }
 
-      for (const [modelId, model] of this.models) {
-        const surfaces = model.userData.navigationSurfaces || [];
-        const locationModel = locationModels.get(modelId);
-        const transitions = (locationModel && locationModel.transitions) || [];
-        const transitionTargets = new Set(
-          transitions.map((transition) => String(transition.locationID))
-        );
-        for (const surface of surfaces) {
-          const enabled = transitionTargets.has(String(surface.userData.locationId));
-          surface.userData.navigationEnabled = enabled;
-          surface.traverse((child) => {
-            if (child.userData.navigationLocationId !== undefined)
-              child.userData.navigationEnabled = enabled;
-          });
-        }
-        const current = surfaces.find((surface) =>
-          String(surface.userData.locationId) === String(locationId)
-        );
-        if (current) {
-          surfaces.forEach((surface) => { surface.visible = false; });
-          current.visible = current.userData.flat;
-          continue;
-        }
-
-        const neighbours = new Set();
-        for (const transition of transitions) {
-          if (transition.sameLevel)
-            neighbours.add(String(transition.locationID));
-        }
-        for (const surface of surfaces) {
-          surface.visible = surface.userData.flat &&
-            !neighbours.has(String(surface.userData.locationId));
-        }
+      for (const surface of this.navigationObjects) {
+        const enabled = targets.has(String(surface.userData.locationId));
+        const visible = enabled && !!surface.userData.flat;
+        surface.visible = visible;
+        surface.userData.navigationEnabled = enabled;
+        surface.traverse((child) => {
+          child.visible = visible;
+          if (child.userData.navigationLocationId !== undefined)
+            child.userData.navigationEnabled = enabled;
+        });
       }
     }
 
