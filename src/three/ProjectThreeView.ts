@@ -86,14 +86,18 @@ export class ProjectThreeView {
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const intersections = this.raycaster.intersectObjects(this.navigationObjects, true);
       const hit = intersections.find((item) => {
+        if (item.object.userData.navigationLocationId === undefined ||
+            !item.object.userData.navigationEnabled)
+          return false;
         let object = item.object;
         while (object) {
-          if (!object.visible)
+          const isNavigation = object.userData.locationId !== undefined ||
+            object.userData.navigationLocationId !== undefined;
+          if (!isNavigation && !object.visible)
             return false;
           object = object.parent;
         }
-        return item.object.userData.navigationLocationId !== undefined &&
-          item.object.userData.navigationEnabled;
+        return true;
       });
       if (hit && typeof this.onNavigate === "function")
         this.onNavigate(hit.object.userData.navigationLocationId);
